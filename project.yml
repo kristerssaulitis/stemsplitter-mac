@@ -1,0 +1,49 @@
+name: StemSplitterMac
+options:
+  bundleIdPrefix: app.stemsplitter
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+packages:
+  StemSplitterMac:
+    path: .
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  StemSplitter:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+      # Xcode compiles .mlpackage → .mlmodelc into the bundle. Run tools/convert_htdemucs.py
+      # and tools/convert_melband.py first.
+      - path: Models/htdemucs.mlpackage
+        buildPhase: resources
+      - path: Models/melband-roformer.mlpackage
+        buildPhase: resources
+      - path: Models/basic-pitch.mlpackage
+        buildPhase: resources
+    dependencies:
+      - package: StemSplitterMac
+        product: StemSeparation
+      - package: StemSplitterMac
+        product: StemAnalysis
+      - package: StemSplitterMac
+        product: StemMix
+      - package: StemSplitterMac
+        product: StemLink
+    settings:
+      base:
+        PRODUCT_NAME: StemSplitter
+        PRODUCT_BUNDLE_IDENTIFIER: app.stemsplitter.mac
+        INFOPLIST_FILE: App/Info.plist
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        COREML_CODEGEN_LANGUAGE: None
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: NO

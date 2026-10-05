@@ -35,10 +35,16 @@ struct TimelineView: View {
                 }
                 .scrollPosition($position)
                 .scrollIndicators(player.zoom > 1 ? .visible : .hidden)
-                .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x } action: { _, x in scrollX = x }
+                .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x } action: { _, x in
+                    if abs(scrollX - x) >= 1.0 { scrollX = x }
+                }
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { w in
-                    viewWidth = max(100, w)
-                    player.maxZoom = Self.maxZoom(width: viewWidth, song: song)
+                    guard w > 0 else { return }
+                    let roundedW = max(100, round(w))
+                    if abs(roundedW - viewWidth) >= 1.0 {
+                        viewWidth = roundedW
+                        player.maxZoom = Self.maxZoom(width: roundedW, song: song)
+                    }
                 }
                 .gesture(MagnifyGesture()
                     .onChanged { g in
@@ -127,7 +133,7 @@ struct TimeRuler: View {
 
     var body: some View {
         Canvas { ctx, size in
-            guard duration > 0 else { return }
+            guard duration > 0, size.width > 0, size.height > 0 else { return }
             let pps = size.width / duration
             let step = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300].first { $0 * pps >= 80 } ?? 600
             var t = 0.0
@@ -151,19 +157,21 @@ struct PlayheadOverlay: View {
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width, d = max(player.duration, 0.01)
-            ZStack(alignment: .topLeading) {
-                if let sel = player.selection {
-                    Rectangle()
-                        .fill(Color.accentColor.opacity(player.looping ? 0.12 : 0.05))
-                        .overlay(alignment: .leading) { Rectangle().fill(Color.accentColor).frame(width: 1) }
-                        .overlay(alignment: .trailing) { Rectangle().fill(Color.accentColor).frame(width: 1) }
-                        .frame(width: max(1, CGFloat((sel.upperBound - sel.lowerBound) / d) * w))
-                        .offset(x: CGFloat(sel.lowerBound / d) * w)
+            if w > 0 {
+                ZStack(alignment: .topLeading) {
+                    if let sel = player.selection {
+                        Rectangle()
+                            .fill(Color.accentColor.opacity(player.looping ? 0.12 : 0.05))
+                            .overlay(alignment: .leading) { Rectangle().fill(Color.accentColor).frame(width: 1) }
+                            .overlay(alignment: .trailing) { Rectangle().fill(Color.accentColor).frame(width: 1) }
+                            .frame(width: max(1, CGFloat((sel.upperBound - sel.lowerBound) / d) * w))
+                            .offset(x: CGFloat(sel.lowerBound / d) * w)
+                    }
+                    Rectangle().fill(Color.white.opacity(0.9)).frame(width: 1.5)
+                        .offset(x: CGFloat(player.currentTime / d) * w)
                 }
-                Rectangle().fill(Color.white.opacity(0.9)).frame(width: 1.5)
-                    .offset(x: CGFloat(player.currentTime / d) * w)
+                .frame(width: w, height: geo.size.height, alignment: .topLeading)
             }
-            .frame(width: w, height: geo.size.height, alignment: .topLeading)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
@@ -179,36 +187,38 @@ struct RulerGesture: View {
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width, d = max(player.duration, 0.01)
-            Color.clear
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { g in
-                            let t = max(0, min(d, Double(g.location.x / w) * d))
-                            let start = dragStart ?? Double(g.startLocation.x / w) * d
-                            dragStart = start
-                            if abs(g.translation.width) > 3 {
-                                player.selectedStem = nil
-                                player.selection = min(start, t)...max(start, t)
-                            }
-                        }
-                        .onEnded { g in
-                            defer { dragStart = nil }
-                            if abs(g.translation.width) <= 3 {
-                                // Double-click the ruler = undo.
-                                if let last = lastTap, Date().timeIntervalSince(last) < 0.35, player.canUndo {
-                                    lastTap = nil
-                                    player.undo()
-                                } else {
-                                    lastTap = Date()
-                                    player.seek(Double(g.location.x / w) * d)
+            if w > 0 {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { g in
+                                let t = max(0, min(d, Double(g.location.x / w) * d))
+                                let start = dragStart ?? Double(g.startLocation.x / w) * d
+                                dragStart = start
+                                if abs(g.translation.width) > 3 {
+                                    player.selectedStem = nil
+                                    player.selection = min(start, t)...max(start, t)
                                 }
-                            } else if let sel = player.selection {
-                                player.currentTime = sel.lowerBound
-                                if player.isPlaying || player.looping { player.play() }
                             }
-                        }
-                )
+                            .onEnded { g in
+                                defer { dragStart = nil }
+                                if abs(g.translation.width) <= 3 {
+                                    // Double-click the ruler = undo.
+                                    if let last = lastTap, Date().timeIntervalSince(last) < 0.35, player.canUndo {
+                                        lastTap = nil
+                                        player.undo()
+                                    } else {
+                                        lastTap = Date()
+                                        player.seek(Double(g.location.x / w) * d)
+                                    }
+                                } else if let sel = player.selection {
+                                    player.currentTime = sel.lowerBound
+                                    if player.isPlaying || player.looping { player.play() }
+                                }
+                            }
+                    )
+            }
         }
         .accessibilityHidden(true)
     }
@@ -233,6 +243,7 @@ struct StemLane: View {
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width, d = max(player.duration, 0.01)
+            if w > 0 {
             let clips = song.clips(stem), color = StemStyle.color(stem)
             ZStack(alignment: .topLeading) {
                 Canvas { ctx, size in
@@ -272,6 +283,7 @@ struct StemLane: View {
                 case .move: NSCursor.openHand.set()
                 default: NSCursor.iBeam.set()
                 }
+            }
             }
         }
         .accessibilityElement()
@@ -515,7 +527,7 @@ struct WaveformLane: View {
 
     var body: some View {
         Canvas { ctx, size in
-            guard !peaks.isEmpty else { return }
+            guard !peaks.isEmpty, size.width > 0, size.height > 0 else { return }
             let cols = max(1, Int(size.width / 2))
             let per = Double(peaks.count) / Double(cols)
             let mid = size.height / 2
@@ -548,6 +560,7 @@ struct PianoRollLane: View {
             if let notes, !notes.isEmpty {
                 let lo = notes.map(\.pitch).min()!, hi = notes.map(\.pitch).max()!
                 Canvas { ctx, size in
+                    guard size.width > 0, size.height > 0 else { return }
                     let span = CGFloat(max(hi - lo + 1, 12))
                     let rowH = size.height / span
                     let d = max(duration, 0.01)

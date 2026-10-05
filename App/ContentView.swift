@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     @Bindable var model = AppModel.shared
-    @State private var showInspector = true
+    @State private var showInspector = ProcessInfo.processInfo.environment["SS_NOINSPECTOR"] == nil
     @State private var dropTargeted = false
     @State private var photoItem: PhotosPickerItem?
     @State private var trimURL: URL?
@@ -17,17 +17,7 @@ struct ContentView: View {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 320)
         } detail: {
-            Group {
-                if let player = model.player {
-                    SongView(player: player)
-                        .id(player.song.id)
-                        .inspector(isPresented: $showInspector) {
-                            InspectorView(player: player)
-                        }
-                } else {
-                    EmptyDropView(targeted: dropTargeted)
-                }
-            }
+            detail
         }
         .toolbar {
             ToolbarItemGroup {
@@ -60,6 +50,34 @@ struct ContentView: View {
         .alert("Couldn't do that", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("OK") {}
         } message: { Text(model.errorMessage ?? "") }
+    }
+
+    private var detail: some View {
+        Group {
+            if let player = model.player {
+                HStack(spacing: 0) {
+                    SongView(player: player)
+                        .id(player.song.id)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if showInspector {
+                        Divider()
+                        InspectorView(player: player)
+                            .frame(width: 270)
+                            .transition(.move(edge: .trailing))
+                    }
+                }
+            } else {
+                EmptyDropView(targeted: dropTargeted)
+            }
+        }
+    }
+
+    /// TEMP bisect G: apply .balanced split style via env.
+    struct TEMPBalanced: ViewModifier {
+        let on: Bool
+        func body(content: Content) -> some View {
+            if on { content.navigationSplitViewStyle(.balanced) } else { content }
+        }
     }
 
     private func pickFiles(multiple: Bool) -> [URL] {

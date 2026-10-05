@@ -8,13 +8,11 @@ struct StemSplitterApp: App {
     var body: some Scene {
         Window("StemSplitter", id: "main") {
             ContentView()
-                // Song-open + inspector needs room: at 960×560 the detail/inspector
-                // split children oscillate min/max and AppKit aborts (Update Constraints
-                // loop). 1400×860 verified crash-free with the inspector open.
-                .frame(minWidth: 1400, minHeight: 860)
+                .frame(minWidth: 1100, minHeight: 650)
                 .preferredColorScheme(.dark)
                 .tint(Color(red: 0.35, green: 0.78, blue: 0.95))
         }
+        .windowResizability(.contentMinSize)
         .commands { AppCommands() }
         Window("Keyboard Shortcuts", id: "shortcuts") { ShortcutsView() }
             .windowResizability(.contentSize)

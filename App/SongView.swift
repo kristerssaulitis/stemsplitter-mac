@@ -34,39 +34,115 @@ struct SongView: View {
     var song: Song { player.song }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HeaderView(player: player)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 14)
-            Divider()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    if song.info.isVideo { VideoPreview(player: player).frame(maxHeight: 220) }
-                    TransportBar(player: player)
-                    TimelineView(player: player)
+        // TEMP bisect B: pick SongView sub-layout via SS_SONGVIEW.
+        let variant = ProcessInfo.processInfo.environment["SS_SONGVIEW"] ?? "full"
+        let inner = Group {
+            switch variant {
+            case "header": HeaderView(player: player)
+            case "transport": ScrollView { TransportBar(player: player).padding(20) }
+            case "timeline": ScrollView { TimelineView(player: player) }
+            case "chords": ScrollView { VStack(alignment: .leading, spacing: 12) { TimelineView(player: player) }.padding(20) }
+            case "stepper": HStack { Spacer(); Stepper("Semitones", value: .constant(0), in: -12...12) }
+            case "steppers": HStack(spacing: 8) {
+                Stepper(value: .constant(0), in: -12...12) { Text("+0 st").font(.body.monospacedDigit()) }
+                Stepper(value: .constant(100), in: 50...150) { Text("100 bpm").font(.body.monospacedDigit()) }
+            }
+            case "scrolltext": ScrollView { Text("hello hello hello hello hello hello hello hello hello") }
+            case "transportbare": TransportBar(player: player)
+            case "timelinebare": TimelineView(player: player)
+            case "stepperbare": Stepper("Semitones", value: .constant(0), in: -12...12)
+            case "steppersbare": HStack(spacing: 8) {
+                Stepper(value: .constant(0), in: -12...12) { Text("+0 st").font(.body.monospacedDigit()) }
+                Stepper(value: .constant(100), in: 50...150) { Text("100 bpm").font(.body.monospacedDigit()) }
+            }
+            case "buttonsbare": HStack(spacing: 10) {
+                ForEach(0..<8, id: \.self) { i in
+                    Button { } label: { Image(systemName: "scissors") }
+                        .buttonStyle(.borderless)
                 }
-                .padding(20)
+            }
+            case "buttons3": HStack(spacing: 10) {
+                ForEach(0..<3, id: \.self) { i in
+                    Button { } label: { Image(systemName: "scissors") }
+                        .buttonStyle(.borderless)
+                }
+            }
+            case "buttons5": HStack(spacing: 10) {
+                ForEach(0..<5, id: \.self) { i in
+                    Button { } label: { Image(systemName: "scissors") }
+                        .buttonStyle(.borderless)
+                }
+            }
+            case "texts6": HStack(spacing: 10) {
+                ForEach(0..<6, id: \.self) { i in Text("item \(i)") }
+            }
+            case "icons6": HStack(spacing: 10) {
+                ForEach(0..<6, id: \.self) { i in Image(systemName: "scissors") }
+            }
+            case "space600": Color.clear.frame(width: 600, height: 10)
+            case "buttons": HStack(spacing: 10) {
+                ForEach(0..<8, id: \.self) { i in
+                    Button { } label: { Image(systemName: "scissors") }
+                        .buttonStyle(.borderless)
+                }
+            }
+            default: VStack(alignment: .leading, spacing: 12) {
+                if song.info.isVideo { VideoPreview(player: player).frame(maxHeight: 220) }
+                TransportBar(player: player)
+                TimelineView(player: player)
+            }
+            .padding(20)
             }
         }
-        .focusable()
-        .focused($focused)
-        .focusEffectDisabled()
-        .onAppear { focused = true }
-        .onKeyPress(.space) { player.togglePlay(); return .handled }
-        .onKeyPress(.delete) {
-            guard player.selection != nil else { return .ignored }
-            player.deleteRegion()
-            return .handled
+        VStack(spacing: 0) {
+            if variant == "full" {
+                HeaderView(player: player)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 14)
+                Divider()
+            }
+            if variant == "header" || variant.hasSuffix("bare") {
+                inner
+            } else {
+                ScrollView { inner.padding(.vertical, variant == "full" ? 0 : 12) }
+            }
         }
-        .onKeyPress(.escape) {
-            guard player.selection != nil || player.selectedStem != nil else { return .ignored }
-            if player.selection != nil { player.selection = nil; player.looping = false } else { player.selectedStem = nil }
-            return .handled
-        }
-        .onKeyPress(characters: .init(charactersIn: "smnior123456789")) { press in handleKey(press.characters) }
+        .modifier(TEMPFocusStrip(player: player, handleKey: { c in handleKey(c) }))
+
         .alert("Playback problem", isPresented: Binding(get: { player.errorMessage != nil }, set: { if !$0 { player.errorMessage = nil } })) {
             Button("OK") {}
         } message: { Text(player.errorMessage ?? "") }
+    }
+
+    /// TEMP bisect F: drop focusable/focused/key handlers via SS_NOFOCUS.
+    struct TEMPFocusStrip: ViewModifier {
+        @Bindable var player: PlayerModel
+        var handleKey: (String) -> KeyPress.Result
+        @FocusState private var focused: Bool
+
+        @ViewBuilder
+        func body(content: Content) -> some View {
+            if ProcessInfo.processInfo.environment["SS_NOFOCUS"] != nil {
+                content
+            } else {
+                content
+                    .focusable()
+                    .focused($focused)
+                    .focusEffectDisabled()
+                    .onKeyPress(.space) { player.togglePlay(); return .handled }
+                    .onKeyPress(.delete) {
+                        guard player.selection != nil else { return .ignored }
+                        player.deleteRegion()
+                        return .handled
+                    }
+                    .onKeyPress(.escape) {
+                        guard player.selection != nil || player.selectedStem != nil else { return .ignored }
+                        if player.selection != nil { player.selection = nil; player.looping = false } else { player.selectedStem = nil }
+                        return .handled
+                    }
+                    .onKeyPress(characters: .init(charactersIn: "smnior123456789")) { press in handleKey(press.characters) }
+            }
+        }
     }
 
     private func handleKey(_ c: String) -> KeyPress.Result {
@@ -96,17 +172,30 @@ struct HeaderView: View {
     var song: Song { player.song }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 18) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(song.title).font(.title2.weight(.semibold)).lineLimit(1)
-                Text("\(Format.time(song.info.duration)) · \(song.stemNames.count) stems · split in \(String(format: "%.0f", song.info.splitSeconds)) s")
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(.secondary)
+        // TEMP bisect D: pick header sub-layout via SS_HEADER.
+        let variant = ProcessInfo.processInfo.environment["SS_HEADER"] ?? "all"
+        Group {
+            switch variant {
+            case "title": Text(song.title).font(.title2.weight(.semibold)).lineLimit(1)
+            case "bpm": HStack { Spacer(); BPMBadge(player: player) }
+            case "key": HStack { Spacer(); KeyBadge(song: song) }
+            case "pitch": HStack { Spacer(); PitchControl(player: player) }
+            default:
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .center, spacing: 18) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(song.title).font(.title2.weight(.semibold)).lineLimit(1)
+                            Text("\(Format.time(song.info.duration)) · \(song.stemNames.count) stems · split in \(String(format: "%.0f", song.info.splitSeconds)) s")
+                                .font(.callout.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 12)
+                        BPMBadge(player: player)
+                        KeyBadge(song: song)
+                        PitchControl(player: player)
+                    }
+                }
             }
-            Spacer()
-            BPMBadge(player: player)
-            KeyBadge(song: song)
-            PitchControl(player: player)
         }
     }
 }
@@ -161,7 +250,7 @@ struct KeyBadge: View {
             if song.analyzing {
                 Text("Detecting key…").font(.title3).redacted(reason: .placeholder)
             } else if let result = song.analysis?.key, let key = song.key {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                HStack(alignment: .center, spacing: 6) {
                     Text(key.longName).font(.title3.weight(.semibold))
                     Text(key.camelot).font(.callout.monospaced()).foregroundStyle(.secondary)
                     if result.confidence < 0.6 {
@@ -195,7 +284,7 @@ struct PitchControl: View {
                 .accessibilityLabel("Pitch in semitones")
                 if let detected {
                     Stepper(value: bpm, in: (detected * 0.5).rounded(.up)...(detected * 1.5).rounded(.down), step: 1) {
-                        HStack(alignment: .firstTextBaseline, spacing: 2) {
+                        HStack(alignment: .center, spacing: 2) {
                             Text(String(Int((detected * song.mix.tempo).rounded()))).font(.body.monospacedDigit())
                             Text("bpm").font(.caption).foregroundStyle(.secondary)
                         }
@@ -235,55 +324,57 @@ struct TransportBar: View {
     @Bindable var player: PlayerModel
 
     var body: some View {
-        HStack(spacing: 14) {
-            Button { player.togglePlay() } label: {
-                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.title2).frame(width: 30)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 14) {
+                Button { player.togglePlay() } label: {
+                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.title2).frame(width: 30)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+                Button { player.toggleLoop() } label: {
+                    Image(systemName: "repeat").foregroundStyle(player.looping ? Color.accentColor : .secondary)
+                }
+                .buttonStyle(.borderless)
+                .help("Loop selection (I / O set points)")
+                .accessibilityLabel(player.looping ? "Looping on" : "Looping off")
+                EditTools(player: player)
+                if let job = AppModel.shared.editJob {
+                    ProgressView().controlSize(.small)
+                    Text("Making \(job.title)…").font(.caption).foregroundStyle(.secondary)
+                }
+                Text("\(Format.precise(player.currentTime)) / \(Format.time(player.duration))")
+                    .font(.body.monospacedDigit())
+                if let sel = player.selection {
+                    Text("Selection \(Format.precise(sel.lowerBound))–\(Format.precise(sel.upperBound))")
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    Button { player.selection = nil; player.looping = false } label: { Image(systemName: "xmark.circle") }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Clear selection")
+                    Button { player.zoomToSelection() } label: { Image(systemName: "arrow.left.and.right.square") }
+                        .buttonStyle(.borderless)
+                        .help("Zoom to selection (⇧⌘=)")
+                        .accessibilityLabel("Zoom to selection")
+                }
+                Spacer(minLength: 12)
+                HStack(spacing: 10) {
+                    Button { player.zoomOut() } label: { Image(systemName: "minus.magnifyingglass") }
+                        .disabled(player.zoom <= 1)
+                        .help("Zoom out (⌘−)")
+                        .accessibilityLabel("Zoom out")
+                    Text(player.zoom <= 1 ? "Fit" : String(format: "%.0f×", player.zoom))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .frame(width: 30)
+                        .onTapGesture { player.zoomToFit() }
+                        .help("Zoom to fit (⌘0)")
+                    Button { player.zoomIn() } label: { Image(systemName: "plus.magnifyingglass") }
+                        .disabled(player.zoom >= player.maxZoom)
+                        .help("Zoom in (⌘=)")
+                        .accessibilityLabel("Zoom in")
+                }
+                .buttonStyle(.borderless)
             }
-            .buttonStyle(.borderless)
-            .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
-            Button { player.toggleLoop() } label: {
-                Image(systemName: "repeat").foregroundStyle(player.looping ? Color.accentColor : .secondary)
-            }
-            .buttonStyle(.borderless)
-            .help("Loop selection (I / O set points)")
-            .accessibilityLabel(player.looping ? "Looping on" : "Looping off")
-            EditTools(player: player)
-            if let job = AppModel.shared.editJob {
-                ProgressView().controlSize(.small)
-                Text("Making \(job.title)…").font(.caption).foregroundStyle(.secondary)
-            }
-            Text("\(Format.precise(player.currentTime)) / \(Format.time(player.duration))")
-                .font(.body.monospacedDigit())
-            if let sel = player.selection {
-                Text("Selection \(Format.precise(sel.lowerBound))–\(Format.precise(sel.upperBound))")
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                Button { player.selection = nil; player.looping = false } label: { Image(systemName: "xmark.circle") }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel("Clear selection")
-                Button { player.zoomToSelection() } label: { Image(systemName: "arrow.left.and.right.square") }
-                    .buttonStyle(.borderless)
-                    .help("Zoom to selection (⇧⌘=)")
-                    .accessibilityLabel("Zoom to selection")
-            }
-            Spacer()
-            HStack(spacing: 10) {
-                Button { player.zoomOut() } label: { Image(systemName: "minus.magnifyingglass") }
-                    .disabled(player.zoom <= 1)
-                    .help("Zoom out (⌘−)")
-                    .accessibilityLabel("Zoom out")
-                Text(player.zoom <= 1 ? "Fit" : String(format: "%.0f×", player.zoom))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .frame(width: 30)
-                    .onTapGesture { player.zoomToFit() }
-                    .help("Zoom to fit (⌘0)")
-                Button { player.zoomIn() } label: { Image(systemName: "plus.magnifyingglass") }
-                    .disabled(player.zoom >= player.maxZoom)
-                    .help("Zoom in (⌘=)")
-                    .accessibilityLabel("Zoom in")
-            }
-            .buttonStyle(.borderless)
         }
     }
 }
@@ -368,3 +459,4 @@ struct VideoPreview: View {
         if av.rate != rate { av.rate = rate }
     }
 }
+

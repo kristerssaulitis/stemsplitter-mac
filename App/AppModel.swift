@@ -103,7 +103,9 @@ final class AppModel {
     private var running = false
     private var downloadRunning = false
 
-    init() { reloadLibrary() }
+    init() {
+        reloadLibrary()
+    }
 
     func select(_ song: Song?) {
         guard song != selection || (song != nil && player == nil) else { return }

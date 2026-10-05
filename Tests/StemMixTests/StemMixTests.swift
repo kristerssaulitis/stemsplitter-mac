@@ -2,13 +2,13 @@ import AVFoundation
 import XCTest
 @testable import StemMix
 
-func writeStem(_ name: String, freq: Float, seconds: Double = 2) throws -> URL {
+func writeStem(_ name: String, freq: Float) throws -> URL {
     let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(name)-\(UUID()).wav")
     let fmt = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 2)!
     let file = try AVAudioFile(forWriting: url, settings: [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 44_100,
                                                            AVNumberOfChannelsKey: 2, AVLinearPCMBitDepthKey: 24],
                                commonFormat: .pcmFormatFloat32, interleaved: false)
-    let n = AVAudioFrameCount(seconds * 44_100)
+    let n = AVAudioFrameCount(2 * 44_100)
     let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: n)!
     buf.frameLength = n
     for i in 0..<Int(n) {
@@ -44,7 +44,6 @@ final class StemMixTests: XCTestCase {
 
     func out(_ ext: String = "wav") -> URL { FileManager.default.temporaryDirectory.appendingPathComponent("mix-\(UUID()).\(ext)") }
 
-    /// Plan success criterion: FX bypassed + pitch 0 → exported stem nulls against the source (< -90 dBFS).
     func testNeutralStemExportNullTests() throws {
         let url = out()
         try ExportRenderer.render(stems: stems, settings: MixSettings(), bpm: 120, only: "vocals", range: nil,
@@ -116,10 +115,10 @@ final class StemMixTests: XCTestCase {
     func testDelayBeatSync() {
         var d = DelaySettings()
         d.beats = 0.5
-        XCTAssertEqual(d.seconds(bpm: 120, tempo: 1), 0.25, accuracy: 1e-9)
+        XCTAssertEqual(d.seconds(bpm: 120), 0.25, accuracy: 1e-9)
         d.beats = nil
         d.milliseconds = 300
-        XCTAssertEqual(d.seconds(bpm: 120, tempo: 1), 0.3, accuracy: 1e-9)
+        XCTAssertEqual(d.seconds(bpm: 120), 0.3, accuracy: 1e-9)
     }
 
     func testClipOps() {
@@ -139,7 +138,7 @@ final class StemMixTests: XCTestCase {
         let dup = Clips.duplicate(c, 0...2, duration: d)
         XCTAssertEqual(dup.map(\.start), [0, 2, 6])
         XCTAssertEqual(dup[1].offset, 0)
-        // Trim can't grow past the source: left edge of clip at offset 6 stops at timeline 0 (offset 0).
+        // Trim can't grow past the source: clip at offset 6 stops at timeline 0 (offset 0).
         let t = Clips.trim(c, index: 1, leftEdge: true, to: -5, sourceLength: d, duration: d)
         XCTAssertEqual(t.count, 1)
         XCTAssertEqual(t[0].start, 0, accuracy: 1e-9)

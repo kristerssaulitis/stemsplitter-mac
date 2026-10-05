@@ -36,8 +36,8 @@ from coremltools.converters.mil.frontend.torch import ops as ct_ops
 from coremltools.converters.mil.frontend.torch.torch_op_registry import register_torch_op
 
 
-# coremltools 8.3: int() on a shape-(1,) constant crashes. Squeeze it first. (Same fix as
-# convert_htdemucs.py; the shape math in Attend/RotaryEmbedding triggers it here too.)
+# coremltools 8.3: int() on a shape-(1,) constant crashes. Squeeze it first; the shape
+# math in Attend/RotaryEmbedding triggers it here too.
 @register_torch_op(override=True)
 def int(context, node):
     x = ct_ops._get_inputs(context, node, expected=1)[0]

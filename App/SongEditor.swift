@@ -10,6 +10,13 @@ enum EditError: Error, LocalizedError {
     var errorDescription: String? { "That edit would leave no audio" }
 }
 
+private protocol StartEnd {
+    var start: Double { get set }
+    var end: Double { get set }
+}
+extension NoteEvent: StartEnd {}
+extension ChordSegment: StartEnd {}
+
 /// Edits that change the audio land as new library entries: plain files stay the database
 /// and the original song folder is never touched.
 enum SongEditor {
@@ -33,7 +40,7 @@ enum SongEditor {
         }
         var peaks = p.peaks, notes = p.notes
         for (name, v) in p.peaks { peaks[name] = Array(v.reversed()) }
-        for (name, v) in p.notes { notes[name] = v.map { mirroredNote($0, duration: d) }.sorted { $0.start < $1.start } }
+        for (name, v) in p.notes { notes[name] = v.map { mirrored($0, duration: d) }.sorted { $0.start < $1.start } }
         try writeSidecars(peaks: peaks, notes: notes, analysis: p.analysis.map { reversedAnalysis($0, duration: d) },
                           mix: p.mix, to: folder)
         return duration
@@ -46,10 +53,10 @@ enum SongEditor {
         }
         var peaks = p.peaks, notes = p.notes
         for (name, v) in p.peaks { peaks[name] = cutPeaks(v, range: range) }
-        for (name, v) in p.notes { notes[name] = cutNotes(v, range: range) }
+        for (name, v) in p.notes { notes[name] = cut(v, range: range, minDuration: 0.01) }
         var analysis = p.analysis
         if var a = analysis {
-            a.chords = cutChords(a.chords, range: range)
+            a.chords = cut(a.chords, range: range, minDuration: 0.05)
             if var t = a.tempo { t.beats = cutBeats(t.beats, range: range); a.tempo = t }
             analysis = a
         }
@@ -76,7 +83,7 @@ enum SongEditor {
         }
         guard !spans.isEmpty else { throw EditError.emptyResult }
 
-        let out = try AVAudioFile(forWriting: dst, settings: wavSettings(sampleRate: sr),
+        let out = try AVAudioFile(forWriting: dst, settings: StemEdit.wavSettings(fmt),
                                   commonFormat: .pcmFormatFloat32, interleaved: false)
         let chunk: Int64 = 65_536
         let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: AVAudioFrameCount(chunk))!
@@ -115,12 +122,6 @@ enum SongEditor {
         return Double(frames) / sr
     }
 
-    static func wavSettings(sampleRate: Double) -> [String: Any] {  // same 24-bit format as split stems
-        [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: sampleRate,
-         AVNumberOfChannelsKey: 2, AVLinearPCMBitDepthKey: 24,
-         AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false]
-    }
-
     static func writeSidecars(peaks: [String: [Float]], notes: [String: [NoteEvent]],
                               analysis: AnalysisResult?, mix: MixSettings, to folder: URL) throws {
         for (name, p) in peaks {
@@ -135,7 +136,7 @@ enum SongEditor {
 
     // MARK: Sidecar remaps
 
-    static func mirroredNote(_ n: NoteEvent, duration: Double) -> NoteEvent {
+    private static func mirrored<T: StartEnd>(_ n: T, duration: Double) -> T {
         var m = n
         m.start = max(0, duration - n.end)
         m.end = max(m.start, duration - n.start)
@@ -148,19 +149,14 @@ enum SongEditor {
             t.beats = t.beats.map { duration - $0 }.filter { $0 >= 0 }.sorted()
             r.tempo = t
         }
-        r.chords = a.chords.map { seg -> ChordSegment in
-            var s = seg
-            s.start = max(0, duration - seg.end)
-            s.end = max(s.start, duration - seg.start)
-            return s
-        }.sorted { $0.start < $1.start }
+        r.chords = a.chords.map { mirrored($0, duration: duration) }.sorted { $0.start < $1.start }
         return r
     }
 
     /// A segment (or note) straddling the cut is split into its before and after parts.
-    static func cutNotes(_ list: [NoteEvent], range: ClosedRange<Double>) -> [NoteEvent] {
+    private static func cut<T: StartEnd>(_ list: [T], range: ClosedRange<Double>, minDuration: Double) -> [T] {
         let len = range.upperBound - range.lowerBound
-        var out: [NoteEvent] = []
+        var out: [T] = []
         for n in list {
             if n.start < range.lowerBound {
                 var l = n; l.end = min(n.end, range.lowerBound); out.append(l)
@@ -169,21 +165,7 @@ enum SongEditor {
                 var r = n; r.start = max(n.start, range.upperBound) - len; r.end -= len; out.append(r)
             }
         }
-        return out.filter { $0.end - $0.start > 0.01 }.sorted { $0.start < $1.start }
-    }
-
-    static func cutChords(_ list: [ChordSegment], range: ClosedRange<Double>) -> [ChordSegment] {
-        let len = range.upperBound - range.lowerBound
-        var out: [ChordSegment] = []
-        for seg in list {
-            if seg.start < range.lowerBound {
-                var l = seg; l.end = min(seg.end, range.lowerBound); out.append(l)
-            }
-            if seg.end > range.upperBound {
-                var r = seg; r.start = max(seg.start, range.upperBound) - len; r.end -= len; out.append(r)
-            }
-        }
-        return out.filter { $0.end - $0.start > 0.05 }.sorted { $0.start < $1.start }
+        return out.filter { $0.end - $0.start > minDuration }.sorted { $0.start < $1.start }
     }
 
     static func cutBeats(_ beats: [Double], range: ClosedRange<Double>) -> [Double] {

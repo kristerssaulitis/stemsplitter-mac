@@ -46,8 +46,8 @@ final class StemSeparationTests: XCTestCase {
         let stft = DemucsSTFT()
         x.withUnsafeBufferPointer { stft.forward($0, re: &re, im: &im) }
         stft.inverseAdd(re: re, im: im, frames: T, into: &y, length: L)
-        // demucs _ispec pads zero frames, so the outer ~hop*1.5 samples are attenuated by design
-        // (the pipeline's triangle weights hide that). The interior must be exact.
+        // demucs _ispec pads zero frames: outer ~hop*1.5 samples attenuated by design (pipeline
+        // triangle weights hide it). Interior must be exact.
         let edge = 3 * DemucsSTFT.hop
         XCTAssertGreaterThan(snr(x[edge..<(L - edge)], y[edge..<(L - edge)]), 60)
     }
@@ -60,8 +60,8 @@ final class StemSeparationTests: XCTestCase {
         XCTAssertEqual(sep.sources, ["drums", "bass", "other", "vocals"])
         let out = try sep.separate(mix)
         XCTAssertEqual(out.count, full.count)
-        // fp16 GPU vs fp32 torch. Error measured against the mix's energy: on this synthetic
-        // fixture some sources are near-silent, so per-source SNR would measure nothing useful.
+        // fp16 GPU vs fp32 torch, measured against the mix's energy: some synthetic-fixture
+        // sources are near-silent, so per-source SNR would measure nothing useful.
         let n = 2 * sep.segmentLength
         let mixEnergy = mix.reduce(0.0) { $0 + Double($1 * $1) }
         for s in 0..<4 {
@@ -71,7 +71,7 @@ final class StemSeparationTests: XCTestCase {
         }
     }
 
-    /// Mock: source k = input × gains[k]. Gains sum to 1, so stems must sum back to the input.
+    /// Gains sum to 1, so stems must sum back to the input.
     final class GainSeparator: MultiStemSeparator {
         let sources = ["drums", "bass", "other", "vocals"]
         let segmentLength = 4_000
@@ -81,12 +81,10 @@ final class StemSeparationTests: XCTestCase {
         }
     }
 
-    /// Mock roformer: vocals = input × k, instrumental = the rest.
     final class HalvesSeparator: MultiStemSeparator {
         let sources = ["vocals", "instrumental"]
         let segmentLength = 4_000
-        let k: Float
-        init(vocalsGain k: Float) { self.k = k }
+        let k: Float = 0.5
         func separate(_ segment: [Float]) throws -> [Float] {
             segment.map { $0 * k } + segment.map { $0 * (1 - k) }
         }
@@ -127,7 +125,6 @@ final class StemSeparationTests: XCTestCase {
         var sumL = [Float](repeating: 0, count: input.l.count)
         for s in stems { for i in 0..<sumL.count { sumL[i] += s.l[i] } }
         XCTAssertGreaterThan(snr(input.l[...], sumL[...]), 60)  // 24-bit storage floor
-        // Vocals got gain 0.4.
         XCTAssertEqual(stems[3].r[1000], input.r[1000] * 0.4, accuracy: 1e-4)
         let peaks = try Data(contentsOf: SplitPipeline.peaksURL(out, "vocals"))
         XCTAssertEqual(peaks.count / 4, Int((1.3 * 50).rounded(.up)))
@@ -171,20 +168,18 @@ final class StemSeparationTests: XCTestCase {
         let L = sep.segmentLength
         XCTAssertEqual(out.count, 4 * L)
         XCTAssertEqual(full.count, 2 * L)
-        // fp16 GPU vs fp32 torch, measured against the mix's energy (as above).
+        // fp16 GPU vs fp32 torch, measured against mix energy (as above).
         let mixEnergy = mix.reduce(0.0) { $0 + Double($1 * $1) }
         func energySNR(_ ref: ArraySlice<Float>, _ got: ArraySlice<Float>) -> Double {
             var err = 0.0
             for (a, b) in zip(ref, got) { err += Double((a - b) * (a - b)) }
             return 10 * log10(mixEnergy / max(err, 1e-30))
         }
-        // vocals
         XCTAssertGreaterThan(energySNR(full[...], out[0..<(2 * L)]), 35, "vocals")
-        // instrumental = mix - vocals must track the torch residual equally.
+        // instrumental = mix - vocals (torch residual)
         var residual = [Float](repeating: 0, count: 2 * L)
         for i in 0..<(2 * L) { residual[i] = mix[i] - full[i] }
         XCTAssertGreaterThan(energySNR(residual[...], out[(2 * L)...]), 35, "instrumental")
-        // And the two outputs sum back to the input exactly.
         var sum = [Float](repeating: 0, count: 2 * L)
         for i in 0..<(2 * L) { sum[i] = out[i] + out[2 * L + i] }
         XCTAssertGreaterThan(snr(mix[...], sum[...]), 120)
@@ -199,7 +194,6 @@ final class StemSeparationTests: XCTestCase {
         XCTAssertEqual(result.stems.map(\.name), ["drums", "bass"])
         let files = (try FileManager.default.contentsOfDirectory(atPath: out.path)).sorted()
         XCTAssertEqual(files, ["bass.wav", "drums.wav", "peaks-bass.f32", "peaks-drums.f32"])
-        // drums got gain 0.1
         let input = try readStereo(src), drums = try readStereo(result.stems[0].url)
         XCTAssertEqual(drums.l[500], input.l[500] * 0.1, accuracy: 1e-4)
     }
@@ -207,11 +201,11 @@ final class StemSeparationTests: XCTestCase {
     func testCascadeFourStem() async throws {
         let src = try makeTone(seconds: 1.1)
         let out = FileManager.default.temporaryDirectory.appendingPathComponent("split-\(UUID())")
-        let cascade = CascadePipeline(vocals: HalvesSeparator(vocalsGain: 0.5), residual: GainSeparator())
+        let cascade = CascadePipeline(vocals: HalvesSeparator(), residual: GainSeparator())
         let result = try await cascade.run(SplitRequest(source: src, outputDirectory: out))
         XCTAssertEqual(result.stems.map(\.name), ["drums", "bass", "other", "vocals"])
         XCTAssertEqual(result.frames, Int(1.1 * 44_100))
-        // Stage 2 ran on the instrumental (0.5·input): drums = 0.1·0.5·input, …
+        // Stage 2 ran on the instrumental (0.5·input): drums = 0.1·0.5·input.
         let input = try readStereo(src)
         let drums = try readStereo(out.appendingPathComponent("drums.wav"))
         let other = try readStereo(out.appendingPathComponent("other.wav"))
@@ -219,16 +213,14 @@ final class StemSeparationTests: XCTestCase {
         XCTAssertEqual(drums.l[800], input.l[800] * 0.05, accuracy: 1e-3)
         XCTAssertEqual(other.l[800], input.l[800] * 0.15, accuracy: 1e-3)
         XCTAssertEqual(vocals.l[800], input.l[800] * 0.5, accuracy: 1e-3)
-        // Stems sum to vocals + kept residual stems: 0.5·input + (0.1+0.2+0.3)·0.5·input.
-        // (The mock's omitted "vocals" gain 0.4 is dropped by design; the real htdemucs
-        // head it replaces is near-silent on an instrumental.)
+        // Stems sum to 0.5·input + (0.1+0.2+0.3)·0.5·input; the mock's "vocals" gain 0.4 is
+        // dropped (the real htdemucs head is near-silent on an instrumental).
         var sumL = [Float](repeating: 0, count: input.l.count)
         for stem in [drums, other, vocals, try readStereo(out.appendingPathComponent("bass.wav"))] {
             for i in 0..<sumL.count { sumL[i] += stem.l[i] }
         }
         let expectedL = input.l.map { $0 * 0.8 }
         XCTAssertGreaterThan(snr(expectedL[...], sumL[...]), 60)
-        // No scratch left behind.
         XCTAssertFalse(FileManager.default.fileExists(atPath: out.appendingPathComponent("stage1").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: out.appendingPathComponent("instrumental.wav").path))
     }

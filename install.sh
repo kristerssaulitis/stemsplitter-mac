@@ -1,5 +1,4 @@
 #!/bin/sh
-# Rebuild Release and install to /Applications. Run after code changes.
 set -e
 cd "$(dirname "$0")"
 xcodegen generate

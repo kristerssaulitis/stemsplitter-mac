@@ -2,8 +2,7 @@ import Foundation
 import StemAnalysis
 import StemSeparation
 
-// Usage: stembench <audio-or-video> [runs] [2|4]
-// Splits into a temp dir and prints wall clock + realtime factor per run (plan: 3 back-to-back runs for thermals).
+// Usage: stembench <audio-or-video> [runs] [2|4]; 3 back-to-back runs for thermals.
 let args = CommandLine.arguments
 guard args.count > 1 else { print("usage: stembench <file> [runs] [2|4]"); exit(2) }
 let src = URL(fileURLWithPath: args[1])
@@ -23,7 +22,6 @@ for run in 1...runs {
                  r.stems.count == 2 ? "2" : "4", r.duration, r.elapsed, r.duration / r.elapsed, out.path))
 }
 
-// Analysis + transcription on the last run's stems.
 let dir = FileManager.default.temporaryDirectory.appendingPathComponent("stembench-\(runs)")
 let stemNames = layout == .two ? ["vocals", "instrumental"] : ["drums", "bass", "other", "vocals"]
 let stems = Dictionary(uniqueKeysWithValues: stemNames.map { ($0, dir.appendingPathComponent("\($0).wav")) })

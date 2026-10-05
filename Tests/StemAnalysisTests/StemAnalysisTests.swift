@@ -7,7 +7,6 @@ let modelsDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
 
 func midiHz(_ m: Int) -> Double { 440 * pow(2, Double(m - 69) / 12) }
 
-/// Harmonic tone with a soft attack/decay, added into `x` at `start` seconds.
 func addTone(_ x: inout [Float], midi: Int, start: Double, dur: Double, amp: Float = 0.15) {
     let f = midiHz(midi), a = Int(start * sr), n = Int(dur * sr)
     for i in 0..<n where a + i < x.count {
@@ -51,7 +50,7 @@ final class StemAnalysisTests: XCTestCase {
     func testTempoClickTracks() throws {
         for bpm in [90.0, 120.0, 128.0, 140.0, 174.0] {
             let r = try XCTUnwrap(TempoDetector.detect(clicks(bpm: bpm, seconds: 30)), "\(bpm)")
-            // Octave errors are what the ½×/2× toggle is for; count them, but expect exact here.
+            // Octave errors are what the ½×/2× toggle is for; expect exact here.
             XCTAssertEqual(r.bpm, bpm, accuracy: 1, "\(bpm) → \(r.bpm)")
             XCTAssertEqual(r.beats.first ?? -1, 0.25, accuracy: 0.03)
         }
@@ -125,7 +124,6 @@ final class StemAnalysisTests: XCTestCase {
         let beats = stride(from: 0.0, to: 12, by: 0.5).map { $0 }
         let segs = ChordTracker.track(chroma: Chroma.frames(x), energy: Chroma.energy(x),
                                       frameDuration: Chroma.frameDuration(), beats: beats)
-        // Label at the middle of each second.
         let want = ["C", "G", "Am", "F"]
         var correct = 0
         for s in 0..<12 {

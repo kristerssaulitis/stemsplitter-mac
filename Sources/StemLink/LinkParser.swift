@@ -17,8 +17,8 @@ public enum MusicLink: Equatable, Sendable {
         }
     }
 
-    /// Parses messy pasted text: surrounding whitespace, tracking query params and both
-    /// open.spotify.com paths and spotify: URIs are accepted; anything else is rejected.
+    /// Accepts open.spotify.com paths, spotify: URIs, tracking params and surrounding
+    /// whitespace; anything else is rejected.
     public static func parse(_ raw: String) -> MusicLink? {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }

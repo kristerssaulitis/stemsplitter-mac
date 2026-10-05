@@ -1,18 +1,17 @@
-// Renders App/Assets.xcassets/AppIcon.appiconset/AppIcon.png (1024×1024).
 // Run: swift tools/make_app_icon.swift
 import AppKit
 import CoreGraphics
 
 let S: CGFloat = 1024
 let margin: CGFloat = 100
-let shape = S - 2 * margin              // 824 — macOS Big Sur grid
+let shape = S - 2 * margin              // macOS Big Sur grid
 let radius: CGFloat = 186
 
 let stems: [(CGColor, String)] = [
-    (#colorLiteral(red: 1.00, green: 0.43, blue: 0.66, alpha: 1).cgColor, "vocals"), // pink
-    (#colorLiteral(red: 1.00, green: 0.66, blue: 0.30, alpha: 1).cgColor, "drums"),  // orange
-    (#colorLiteral(red: 0.35, green: 0.66, blue: 1.00, alpha: 1).cgColor, "bass"),   // blue
-    (#colorLiteral(red: 0.32, green: 0.88, blue: 0.63, alpha: 1).cgColor, "other"),  // green
+    (#colorLiteral(red: 1.00, green: 0.43, blue: 0.66, alpha: 1).cgColor, "vocals"),
+    (#colorLiteral(red: 1.00, green: 0.66, blue: 0.30, alpha: 1).cgColor, "drums"),
+    (#colorLiteral(red: 0.35, green: 0.66, blue: 1.00, alpha: 1).cgColor, "bass"),
+    (#colorLiteral(red: 0.32, green: 0.88, blue: 0.63, alpha: 1).cgColor, "other"),
 ]
 
 let cs = CGColorSpace(name: CGColorSpace.sRGB)!
@@ -26,7 +25,6 @@ ctx.saveGState()
 ctx.addPath(path)
 ctx.clip()
 
-// Background: dark vertical gradient
 let bg = CGGradient(colorsSpace: cs,
                     colors: [#colorLiteral(red: 0.16, green: 0.16, blue: 0.26, alpha: 1).cgColor,
                              #colorLiteral(red: 0.055, green: 0.055, blue: 0.10, alpha: 1).cgColor] as CFArray,
@@ -53,7 +51,6 @@ for (i, stem) in stems.enumerated() {
         let envelope = 0.35 + 0.65 * sin(.pi * t)          // quieter at edges
         let h = laneH * (0.18 + 0.82 * rnd()) * envelope
         let bar = CGRect(x: x - barW / 2, y: yc - h / 2, width: barW, height: h)
-        // soft glow behind, then solid bar
         ctx.setStrokeColor(color.copy(alpha: 0.22)!)
         ctx.setLineWidth(barW + 10)
         ctx.setLineCap(.round)
@@ -69,7 +66,6 @@ for (i, stem) in stems.enumerated() {
     }
 }
 
-// Top sheen
 let sheen = CGGradient(colorsSpace: cs,
                        colors: [NSColor.white.withAlphaComponent(0.07).cgColor,
                                 NSColor.white.withAlphaComponent(0).cgColor] as CFArray,
@@ -77,7 +73,6 @@ let sheen = CGGradient(colorsSpace: cs,
 ctx.drawLinearGradient(sheen, start: CGPoint(x: 0, y: S), end: CGPoint(x: 0, y: S * 0.45), options: [])
 ctx.restoreGState()
 
-// Hairline border
 ctx.addPath(path)
 ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.12).cgColor)
 ctx.setLineWidth(3)

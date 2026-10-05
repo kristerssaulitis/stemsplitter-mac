@@ -27,17 +27,11 @@ public final class NoteTranscriber {
     static let framesPerWindow = 172
     static let midiOffset = 21
     static let pitches = 88
-
-    public struct Options: Sendable {
-        public var onsetThreshold: Float = 0.5
-        public var frameThreshold: Float = 0.3
-        public var minNoteFrames = 11            // round(127.7 ms * 86.13 fps)
-        public var energyTolerance = 11
-        public var melodiaTrick = true
-        /// MIDI pitch limits (upstream min_freq/max_freq): drops bleed outside the instrument's range.
-        public var pitchRange = 21...108
-        public init() {}
-    }
+    static let onsetThreshold: Float = 0.5
+    static let frameThreshold: Float = 0.3
+    static let minNoteFrames = 11            // round(127.7 ms * 86.13 fps)
+    static let energyTolerance = 11
+    static let melodiaTrick = true
 
     private let model: MLModel
 
@@ -49,9 +43,10 @@ public final class NoteTranscriber {
     }
 
     /// `x`: mono at 22.05 kHz. Polyphonic notes, sorted by start.
-    public func transcribe(_ x: [Float], options: Options = Options()) throws -> [NoteEvent] {
+    /// `pitchRange` (upstream min_freq/max_freq) drops bleed outside the instrument's range.
+    public func transcribe(_ x: [Float], pitchRange: ClosedRange<Int> = 21...108) throws -> [NoteEvent] {
         let (frames, onsets) = try activations(x)
-        return Self.notes(frames: frames, onsets: onsets, options: options)
+        return Self.notes(frames: frames, onsets: onsets, pitchRange: pitchRange)
     }
 
     /// Model activations, unwrapped: (note, onset), each [frame][88].
@@ -92,19 +87,19 @@ public final class NoteTranscriber {
         return original - windowOffset * floor(Double(frame) / annotFrames)
     }
 
-    static func notes(frames: [[Float]], onsets: [[Float]], options o: Options) -> [NoteEvent] {
+    static func notes(frames: [[Float]], onsets: [[Float]], pitchRange: ClosedRange<Int>) -> [NoteEvent] {
         let n = frames.count
         guard n > 2 else { return [] }
         let P = pitches
 
         var onsets = onsets, frames = frames
         for t in 0..<n {
-            for p in 0..<P where !o.pitchRange.contains(p + midiOffset) {
+            for p in 0..<P where !pitchRange.contains(p + midiOffset) {
                 onsets[t][p] = 0
                 frames[t][p] = 0
             }
         }
-        // Inferred onsets: min over 1- and 2-frame rises, rescaled to the onset max.
+        // Inferred onsets, rescaled to the onset max.
         var diff = [[Float]](repeating: [Float](repeating: 0, count: P), count: n)
         var maxDiff: Float = 0, maxOnset: Float = 0
         for t in 0..<n {
@@ -121,10 +116,10 @@ public final class NoteTranscriber {
             for t in 0..<n { for p in 0..<P { onsets[t][p] = max(onsets[t][p], maxOnset * diff[t][p] / maxDiff) } }
         }
 
-        // Onset peaks (local maxima in time) above threshold, processed latest first.
+        // Onset peaks, processed latest first.
         var peaks: [(Int, Int)] = []
         for t in 1..<(n - 1) {
-            for p in 0..<P where onsets[t][p] >= o.onsetThreshold && onsets[t][p] > onsets[t - 1][p] && onsets[t][p] > onsets[t + 1][p] {
+            for p in 0..<P where onsets[t][p] >= onsetThreshold && onsets[t][p] > onsets[t - 1][p] && onsets[t][p] > onsets[t + 1][p] {
                 peaks.append((t, p))
             }
         }
@@ -145,41 +140,41 @@ public final class NoteTranscriber {
         for (start, p) in peaks {
             if start >= n - 1 { continue }
             var i = start + 1, k = 0
-            while i < n - 1 && k < o.energyTolerance {
-                k = energy[i][p] < o.frameThreshold ? k + 1 : 0
+            while i < n - 1 && k < energyTolerance {
+                k = energy[i][p] < frameThreshold ? k + 1 : 0
                 i += 1
             }
             i -= k
-            if i - start <= o.minNoteFrames { continue }
+            if i - start <= minNoteFrames { continue }
             for t in start..<i { clear(t, p) }
             events.append((start, i, p, amplitude(start, i, p)))
         }
 
-        if o.melodiaTrick {
+        if melodiaTrick {
             // Upstream re-scans for the argmax each iteration. Energy only ever drops to 0, so visiting
             // cells once in descending order (skipping zeroed ones) yields the same sequence in O(k log k).
             var cells: [(Float, Int, Int)] = []
-            for t in 0..<n { for p in 0..<P where energy[t][p] > o.frameThreshold { cells.append((energy[t][p], t, p)) } }
+            for t in 0..<n { for p in 0..<P where energy[t][p] > frameThreshold { cells.append((energy[t][p], t, p)) } }
             cells.sort { $0.0 > $1.0 }
             for (_, bt, bp) in cells {
-                guard energy[bt][bp] > o.frameThreshold else { continue }
+                guard energy[bt][bp] > frameThreshold else { continue }
                 energy[bt][bp] = 0
                 var i = bt + 1, k = 0
-                while i < n - 1 && k < o.energyTolerance {
-                    k = energy[i][bp] < o.frameThreshold ? k + 1 : 0
+                while i < n - 1 && k < energyTolerance {
+                    k = energy[i][bp] < frameThreshold ? k + 1 : 0
                     clear(i, bp)
                     i += 1
                 }
                 let end = i - 1 - k
                 i = bt - 1
                 k = 0
-                while i > 0 && k < o.energyTolerance {
-                    k = energy[i][bp] < o.frameThreshold ? k + 1 : 0
+                while i > 0 && k < energyTolerance {
+                    k = energy[i][bp] < frameThreshold ? k + 1 : 0
                     clear(i, bp)
                     i -= 1
                 }
                 let start = i + 1 + k
-                if end - start <= o.minNoteFrames { continue }
+                if end - start <= minNoteFrames { continue }
                 events.append((start, end, bp, amplitude(start, end, bp)))
             }
         }

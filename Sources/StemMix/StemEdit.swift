@@ -1,7 +1,7 @@
 import Accelerate
 import AVFoundation
 
-/// The one audio-file edit clips need: reversed clips read a pre-rendered backwards copy of the stem,
+/// Reversed clips read a pre-rendered backwards copy of the stem,
 /// so playback and export never reverse in real time.
 public enum StemEdit {
     /// `.rev-vocals.wav` beside `vocals.wav`. Shared by every clip and duplicate of that file.

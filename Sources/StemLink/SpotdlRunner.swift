@@ -38,8 +38,8 @@ public struct SpotdlRunner: Sendable {
         return NSHomeDirectory()
     }()
 
-    /// Finds spotDL for a GUI app: launchd gives a minimal PATH without ~/.local/bin
-    /// (pipx) or Homebrew — which is also where the ffmpeg spotDL shells out to lives.
+    /// Finds spotDL for a GUI app: launchd's PATH lacks ~/.local/bin (pipx) and
+    /// Homebrew, which also holds the ffmpeg spotDL shells out to.
     /// `standardDirs: false` searches only `searchPath` (tests).
     public static func locate(searchPath: String? = nil, standardDirs: Bool = true) -> SpotdlRunner? {
         var dirs = Set((searchPath ?? ProcessInfo.processInfo.environment["PATH"] ?? "")
@@ -58,14 +58,6 @@ public struct SpotdlRunner: Sendable {
         return SpotdlRunner(executable: URL(fileURLWithPath: hit + "/spotdl"), environment: env)
     }
 
-    private final class Snapshot: @unchecked Sendable {
-        let lock = NSLock()
-        var value: SpotdlProgress?
-        func set(_ p: SpotdlProgress) { lock.lock(); value = p; lock.unlock() }
-        var latest: SpotdlProgress? { lock.lock(); defer { lock.unlock() }; return value }
-    }
-
-    /// `spotdl download <query> --output <dir> --format mp3 --print-errors`, streaming progress.
     /// `homeDirectory` redirects spotDL's caches into app storage so the sandboxed app's
     /// children never write to the real home. Returns the downloaded audio files.
     public func download(_ query: String, outputDirectory: URL, homeDirectory: URL,
@@ -86,14 +78,10 @@ public struct SpotdlRunner: Sendable {
         process.standardError = pipe
         process.standardInput = FileHandle.nullDevice
 
-        let snapshot = Snapshot()
-        let output = SpotdlOutput { progress($0); snapshot.set($0) }
-        pipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            if data.isEmpty {
-                handle.readabilityHandler = nil
-            } else {
-                output.append(data)
+        let output = SpotdlOutput(onChange: progress)
+        let reader = Task {
+            for try await line in pipe.fileHandleForReading.bytes.lines {
+                output.consume(line)
             }
         }
 
@@ -109,20 +97,19 @@ public struct SpotdlRunner: Sendable {
             process.waitUntilExit()
             throw SpotdlError.cancelled
         }
-        pipe.fileHandleForReading.readabilityHandler = nil
-        output.append((try? pipe.fileHandleForReading.readDataToEndOfFile()) ?? Data())
-        output.flush()
+        // Drain the tail (last line often has no newline) before checking the exit status.
+        try? await reader.value
 
         let files = ((try? FileManager.default.contentsOfDirectory(at: outputDirectory, includingPropertiesForKeys: nil)) ?? [])
             .filter { $0.pathExtension.lowercased() == "mp3" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
         if process.terminationStatus != 0 {
-            throw SpotdlError.failed(snapshot.latest?.lastIssue
+            throw SpotdlError.failed(output.latest?.lastIssue
                 ?? "spotDL exited with code \(process.terminationStatus).")
         }
         guard !files.isEmpty else {
-            throw SpotdlError.failed(snapshot.latest?.lastIssue ?? "No tracks matched that link.")
+            throw SpotdlError.failed(output.latest?.lastIssue ?? "No tracks matched that link.")
         }
         return files
     }

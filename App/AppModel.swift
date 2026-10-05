@@ -32,7 +32,7 @@ final class SplitJob: Identifiable {
     var title: String { source.deletingPathExtension().lastPathComponent }
 }
 
-/// An in-flight reverse/cut edit; audio work runs detached, the entry appears when done.
+/// In-flight reverse/cut edit; audio runs detached, the entry appears when done.
 struct EditJob: Identifiable {
     let id = UUID()
     let title: String
@@ -85,7 +85,6 @@ final class AppModel {
     private(set) var selection: Song?
     private(set) var player: PlayerModel?
     var errorMessage: String?
-    var layout: StemLayout = .four
     var lastTimings: [String: Double] = [:]
 
     /// Transcription runs eagerly only up to this duration; longer files get a "Transcribe" button.
@@ -130,12 +129,12 @@ final class AppModel {
 
     func enqueue(_ urls: [URL], range: ClosedRange<Double>? = nil) {
         for url in urls {
-            let id = jobID(url, range: range, layout: layout)
+            let id = jobID(url, range: range, layout: .four)
             if let existing = songs.first(where: { $0.id == id }) {
                 select(existing)  // double drop focuses the existing split
                 continue
             }
-            queue.append(SplitJob(source: url, range: range, layout: layout))
+            queue.append(SplitJob(source: url, range: range, layout: .four))
         }
         pump()
     }
@@ -223,7 +222,7 @@ final class AppModel {
     // MARK: Link downloads (spotDL)
 
     /// Downloaded MP3s keep here (not caches) so re-pasting a link skips the fetch and
-    /// re-splitting an old song still finds its source.
+    /// re-splitting still finds its source.
     static let downloadsURL: URL = {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("StemSplitter/Downloads", isDirectory: true)
@@ -450,7 +449,6 @@ final class AppModel {
     }
 
     private func notifyQueueDone() {
-        updateDock()
         guard !NSApp.isActive else { return }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { ok, _ in
             guard ok else { return }

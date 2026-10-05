@@ -108,14 +108,13 @@ final class Song: Identifiable, Hashable {
 
     var semitones: Int { Int(mix.pitch.rounded()) }
     var key: MusicalKey? { analysis?.key?.key.transposed(semitones) }
-    var bpm: Double? { analysis?.tempo.map { $0.bpm * mix.tempo } }
 
     /// "Title - Vocals - 124bpm Am"
     func exportName(_ stem: String?) -> String {
         var parts = [title]
         if let stem { parts.append(stem.capitalized) }
         var tags: [String] = []
-        if let bpm { tags.append("\(Int(bpm.rounded()))bpm") }
+        if let bpm = analysis?.tempo.map({ $0.bpm * mix.tempo }) { tags.append("\(Int(bpm.rounded()))bpm") }
         if let key { tags.append(key.name) }
         if !tags.isEmpty { parts.append(tags.joined(separator: " ")) }
         return parts.joined(separator: " - ").replacingOccurrences(of: "/", with: "-")

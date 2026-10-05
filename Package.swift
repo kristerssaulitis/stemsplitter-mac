@@ -1,8 +1,8 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// StemSplitter for Mac — engine libraries. The app target lives in project.yml (xcodegen)
-// and links these. Standalone: no dependency on ../stemsplitter (see AudioDecoder.swift).
+// Engine libraries; the app target lives in project.yml (xcodegen). Standalone: no
+// dependency on ../stemsplitter (see AudioDecoder.swift).
 let package = Package(
     name: "StemSplitterMac",
     platforms: [.macOS(.v15)],

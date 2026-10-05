@@ -4,9 +4,8 @@ import Accelerate
 /// `normalized=True`, Nyquist bin dropped). Core ML has no complex tensors, so this runs in Swift.
 ///
 /// Demucs pads the signal by 1536 (reflect) on the left and `1536 + T*1024 - L` on the right,
-/// runs a centered torch.stft, then keeps frames `2..<2+T`. Those two paddings cancel out:
-/// frame `f` covers padded samples `f*1024 ..< f*1024+4096`, i.e. signal samples starting at
-/// `f*1024 - 1536`. That is all this type needs to know.
+/// runs a centered torch.stft, then keeps frames `2..<2+T`. The paddings cancel: frame `f`
+/// covers padded samples `f*1024 ..< f*1024+4096`, i.e. signal samples starting at `f*1024 - 1536`.
 public final class DemucsSTFT {
     public static let nfft = 4096
     public static let hop = 1024

@@ -26,7 +26,7 @@ public final class AudioDecoder {
     private let reader: AVAssetReader
     private let output: AVAssetReaderTrackOutput
 
-    public init(url: URL, sampleRate: Double = 44_100) async throws {
+    public init(url: URL) async throws {
         let asset = AVURLAsset(url: url)
         let tracks: [AVAssetTrack]
         do {
@@ -39,7 +39,7 @@ public final class AudioDecoder {
         do { reader = try AVAssetReader(asset: asset) } catch { throw SplitError.unreadable }
         output = AVAssetReaderTrackOutput(track: track, outputSettings: [
             AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: sampleRate,
+            AVSampleRateKey: 44_100,
             AVNumberOfChannelsKey: 2,
             AVLinearPCMBitDepthKey: 32,
             AVLinearPCMIsFloatKey: true,

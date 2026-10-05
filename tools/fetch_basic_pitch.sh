@@ -1,5 +1,5 @@
 #!/bin/sh
-# Spotify basic-pitch (Apache-2.0) ships a Core ML model inside its wheel. Copy it to ../Models.
+# Spotify basic-pitch (Apache-2.0) ships a Core ML model inside its wheel.
 set -e
 cd "$(dirname "$0")/.."
 tmp=$(mktemp -d)

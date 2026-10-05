@@ -15,8 +15,6 @@ public enum MixError: Error, LocalizedError {
 
 /// One builder for playback and offline export, so what you hear is what you export.
 ///
-/// Each stem's player plays its clip list (`StemSettings.clips`), scheduled sample-accurately.
-///
 /// per stem:  Player → EQ → Delay → Reverb → StemMixer(vol, pan)
 /// all stems → Bus → TimePitch(pitch, rate) → MasterEQ → main mixer → output
 public final class MixGraph {
@@ -37,8 +35,6 @@ public final class MixGraph {
     private let masterEQ = AVAudioUnitEQ(numberOfBands: 3)
     public private(set) var settings: MixSettings
     public var bpm: Double?
-
-    // Playback position bookkeeping.
     private var startTime: Double = 0
     private var loop: ClosedRange<Double>?
     public private(set) var isPlaying = false
@@ -100,7 +96,7 @@ public final class MixGraph {
         }
     }
 
-    /// Live parameter update. Safe while playing.
+    /// Safe while playing.
     public func apply(_ s: MixSettings) {
         let tempoChanged = s.tempo != settings.tempo
         let clipsChanged = names.contains { s[$0].clips != settings[$0].clips }
@@ -109,7 +105,7 @@ public final class MixGraph {
             let st = s[name]
             Self.set(eqs[name]!, st.eq)
             let d = delays[name]!
-            d.delayTime = st.delay.seconds(bpm: bpm, tempo: 1)  // graph runs pre-TimePitch: source time
+            d.delayTime = st.delay.seconds(bpm: bpm)
             d.feedback = Float(st.delay.feedback)
             d.wetDryMix = Float(st.delay.mix)
             d.bypass = !st.delay.enabled
@@ -239,7 +235,7 @@ public final class MixGraph {
         return out
     }
 
-    /// Writes the stem as arranged (gaps silent) to a 24-bit WAV, 10 s at a time.
+    /// Writes the stem as arranged (gaps silent) to a 24-bit WAV.
     public func bounce(_ name: String, to url: URL) throws {
         let out = try AVAudioFile(forWriting: url, settings: StemEdit.wavSettings(format), commonFormat: .pcmFormatFloat32, interleaved: false)
         let total = files[name]!.length, step = frame(10)
@@ -253,13 +249,12 @@ public final class MixGraph {
     // MARK: Offline render
 
     /// Renders `range` (source seconds) of the mix into `out` in the graph's float format.
-    /// `only`: render a single stem through its own chain (others silenced), else the full mix.
+    /// `only` routes one stem through its chain; nil is the full mix.
     func renderOffline(range: ClosedRange<Double>, only: String?, sampleRate: Double,
                        write: (AVAudioPCMBuffer) throws -> Void, progress: (Double) -> Void) throws {
         var s = settings
         if let only {
             for n in names { s.stems[n, default: StemSettings()].solo = n == only; s.stems[n, default: StemSettings()].mute = n != only }
-            s.stems[only, default: StemSettings()].mute = false
             s.stems[only, default: StemSettings()].volume = 1
         }
         apply(s)

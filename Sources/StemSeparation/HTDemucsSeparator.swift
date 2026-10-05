@@ -35,10 +35,10 @@ public final class HTDemucsSeparator: MultiStemSeparator {
     private let frames: Int
 
     /// `url`: compiled `.mlmodelc`. GPU is the fast path on Mac: the ANE compiler rejects this graph.
-    public init(modelURL url: URL, computeUnits: MLComputeUnits = .cpuAndGPU) throws {
+    public init(modelURL url: URL) throws {
         guard FileManager.default.fileExists(atPath: url.path) else { throw SeparatorError.modelMissing(url.path) }
         let config = MLModelConfiguration()
-        config.computeUnits = computeUnits
+        config.computeUnits = .cpuAndGPU
         model = try MLModel(contentsOf: url, configuration: config)
         let meta = model.modelDescription.metadata[.creatorDefinedKey] as? [String: String] ?? [:]
         guard let names = meta["sources"], let seg = meta["segment_samples"].flatMap(Int.init) else {
@@ -53,9 +53,6 @@ public final class HTDemucsSeparator: MultiStemSeparator {
         let L = segmentLength, T = frames, B = DemucsSTFT.bins, S = sources.count
         precondition(segment.count == 2 * L)
 
-        let mix = try MLMultiArray(shape: [1, 2, NSNumber(value: L)], dataType: .float32)
-        let spec = try MLMultiArray(shape: [1, 4, NSNumber(value: B), NSNumber(value: T)], dataType: .float32)
-        try mix.writeDense(segment)
         let plane = B * T
         var cac = [Float](repeating: 0, count: 4 * plane)
         segment.withUnsafeBufferPointer { seg in
@@ -66,7 +63,8 @@ public final class HTDemucsSeparator: MultiStemSeparator {
                 }
             }
         }
-        try spec.writeDense(cac)
+        let mix = MLMultiArray(MLShapedArray(scalars: segment, shape: [1, 2, L]))
+        let spec = MLMultiArray(MLShapedArray(scalars: cac, shape: [1, 4, B, T]))
 
         let out = try model.prediction(from: MLDictionaryFeatureProvider(dictionary: ["mix": mix, "spec": spec]))
         guard let freq = out.featureValue(for: "freq")?.multiArrayValue,
@@ -74,8 +72,17 @@ public final class HTDemucsSeparator: MultiStemSeparator {
             throw SeparatorError.badModel("missing freq/time outputs")
         }
         // time: (1, S*2, L) → result directly; freq: (1, S*4, B, T) → iSTFT added on top.
-        var result = try time.readDense(count: S * 2 * L)
-        let freqFlat = try freq.readDense(count: S * 4 * plane)
+        // NB: MLShapedArray.count is unreliable after converting: — check shape instead.
+        let timeArray = MLShapedArray<Float>(converting: time)
+        guard timeArray.shape == [1, S * 2, L] else {
+            throw SeparatorError.badModel("unexpected time output shape \(time.shape)")
+        }
+        var result = Array(timeArray.scalars)
+        let freqArray = MLShapedArray<Float>(converting: freq)
+        guard freqArray.shape == [1, S * 4, B, T] else {
+            throw SeparatorError.badModel("unexpected freq output shape \(freq.shape)")
+        }
+        let freqFlat = Array(freqArray.scalars)
         freqFlat.withUnsafeBufferPointer { f in
             result.withUnsafeMutableBufferPointer { r in
                 for s in 0..<S {

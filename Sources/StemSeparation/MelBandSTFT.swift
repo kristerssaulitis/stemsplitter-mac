@@ -1,12 +1,12 @@
 import Accelerate
 
-/// Mel-Band RoFormer STFT/iSTFT: nfft 2048, hop 441, win 2048, unnormalized, center=True
-/// with reflect padding. All 1025 bins kept (DC and Nyquist are real: im = 0). Unlike
-/// `DemucsSTFT`, the hop does not divide the window, so the inverse normalizes each sample
-/// by the actual summed window² (what torch.istft does) instead of a constant.
+/// Mel-Band RoFormer STFT/iSTFT: unnormalized, center=True with reflect padding. All bins
+/// kept (DC and Nyquist are real: im = 0). Unlike `DemucsSTFT`, hop does not divide the
+/// window, so the inverse normalizes each sample by the actual summed window² (what
+/// torch.istft does) instead of a constant.
 ///
-/// Frame `f` covers padded samples `f*441 ..< f*441+2048`, where the padded signal is the
-/// input reflect-padded by 1024 on both sides. `frameCount(L) = L/441 + 1`.
+/// Frame `f` covers padded samples `f*hop ..< f*hop+nfft`, the input reflect-padded by
+/// nfft/2 on both sides.
 public final class MelBandSTFT {
     public static let nfft = 2048
     public static let hop = 441
@@ -82,7 +82,7 @@ public final class MelBandSTFT {
             vDSP_DFT_Execute(forward, evens, odds, &outR, &outI)
             let o = f * B
             stageR.withUnsafeMutableBufferPointer { s in
-                vDSP_vsmul(outR, 1, &halfScale, s.baseAddress! + o, 1, vDSP_Length(half))  // bins 0…1023
+                vDSP_vsmul(outR, 1, &halfScale, s.baseAddress! + o, 1, vDSP_Length(half))
                 s[o + B - 1] = outI[0] * halfScale                                        // Nyquist, real
             }
             stageI.withUnsafeMutableBufferPointer { s in
@@ -122,11 +122,9 @@ public final class MelBandSTFT {
                 $0.baseAddress!.update(from: s.baseAddress! + f * B, count: half) } }
             stageI.withUnsafeBufferPointer { s in outI.withUnsafeMutableBufferPointer {
                 $0.baseAddress!.update(from: s.baseAddress! + f * B, count: half) } }
-            // outI[0] holds the Nyquist real part (halfcomplex packing); DC/Nyquist im are 0.
-            let nyquist = outI[0]
+            // DC imaginary must be 0 for the halfcomplex layout.
             outI[0] = 0
             vDSP_DFT_Execute(inverse, outR, outI, &evens, &odds)
-            outI[0] = nyquist
             frame.withUnsafeMutableBufferPointer { fr in
                 var z: Float = 0
                 vDSP_vsadd(evens, 1, &z, fr.baseAddress!, 2, vDSP_Length(half))

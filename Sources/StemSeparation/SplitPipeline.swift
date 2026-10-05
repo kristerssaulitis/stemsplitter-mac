@@ -12,8 +12,8 @@ public struct SplitRequest: Sendable {
     /// Seconds into the source. `nil` = whole file.
     public var range: ClosedRange<Double>?
     public var layout: StemLayout
-    /// Sources to skip writing (`.four` only). The cascade's residual split drops htdemucs's
-    /// own vocals head, which would be near-silent on an instrumental.
+    /// Sources to skip writing (`.four` only): the cascade's residual split drops htdemucs's
+    /// own vocals head, near-silent on an instrumental.
     public var omitStems: Set<String>
 
     public init(source: URL, outputDirectory: URL, range: ClosedRange<Double>? = nil, layout: StemLayout = .four,
@@ -34,8 +34,8 @@ public struct SplitResult: Sendable {
     public var duration: Double { Double(frames) / SplitPipeline.sampleRate }
 }
 
-/// Decode → fixed segments with 25 % overlap → model → triangle-weighted overlap-add → WAV.
-/// Streams: memory is O(segment), not O(song). Same weighting as demucs `apply_model`.
+/// Decode → overlapping segments → model → triangle-weighted overlap-add → WAV.
+/// Streams: memory is O(segment), not O(song).
 public final class SplitPipeline {
     public static let sampleRate = 44_100.0
     /// Waveform peaks per second written beside each stem as `peaks-<stem>.f32`.
@@ -83,7 +83,7 @@ public final class SplitPipeline {
         }
         let peaks = names.map { _ in PeakAccumulator(binSize: Int(sr) / Self.peaksPerSecond) }
 
-        // Triangle weights, as demucs: 1...L/2, then down to 1.
+        // Triangle weights, as demucs `apply_model`.
         var weight = [Float](repeating: 0, count: L)
         for i in 0..<L { weight[i] = Float(i < L / 2 ? i + 1 : L - i) }
         var maxW = weight.max()!
@@ -109,7 +109,6 @@ public final class SplitPipeline {
             while true {
                 try Task.checkCancellation()
                 let segStart = seg * stride
-                // Fill input until it covers this segment.
                 while !eof && bufStart + bufL.count < segStart + L {
                     guard let block = try decoder.next() else { eof = true; break }
                     let n = block.l.count
@@ -152,7 +151,6 @@ public final class SplitPipeline {
                 progress(min(1, Double(emitted) / Double(expected)))
                 if isLast { break }
 
-                // Shift accumulators left by `stride`.
                 for k in 0..<(S * 2) {
                     acc.withUnsafeMutableBufferPointer { ap in
                         let b = ap.baseAddress! + k * L
@@ -191,7 +189,6 @@ public final class SplitPipeline {
         var inv = [Float](repeating: 0, count: count)
         var one: Float = 1
         vDSP_svdiv(&one, wsum, 1, &inv, 1, vDSP_Length(count))
-        // Per source/channel normalized slices.
         func channel(_ s: Int, _ c: Int) -> [Float] {
             var r = [Float](repeating: 0, count: count)
             acc.withUnsafeBufferPointer { a in

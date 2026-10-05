@@ -1,5 +1,4 @@
 import AppKit
-import StemAnalysis
 import StemMix
 import SwiftUI
 

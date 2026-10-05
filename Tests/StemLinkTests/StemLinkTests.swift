@@ -32,10 +32,10 @@ final class StemLinkTests: XCTestCase {
         XCTAssertNil(MusicLink.parse(""))
         XCTAssertNil(MusicLink.parse("   "))
         XCTAssertNil(MusicLink.parse("https://google.com"))
-        XCTAssertNil(MusicLink.parse("https://open.spotify.com/track/"))  // no id
+        XCTAssertNil(MusicLink.parse("https://open.spotify.com/track/"))
         XCTAssertNil(MusicLink.parse("https://open.spotify.com/genre/discover-page"))
         XCTAssertNil(MusicLink.parse("spotify:episode:5pd1mU0zU8eYz0WfW1z1z1z"))
-        XCTAssertNil(MusicLink.parse("https://www.youtube.com/watch"))  // no v param
+        XCTAssertNil(MusicLink.parse("https://www.youtube.com/watch"))
         XCTAssertNil(MusicLink.parse("not a link"))
     }
 
@@ -49,8 +49,7 @@ final class StemLinkTests: XCTestCase {
         p.consume("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
         XCTAssertEqual(p.finishedCount, 1)
         XCTAssertEqual(p.lastFinished, "Rick Astley - Never Gonna Give You Up")
-        XCTAssertEqual(p.processing, "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT")
-        XCTAssertNotNil(p.lastIssue)  // the fallback note is kept but only used when nothing downloads
+        XCTAssertNotNil(p.lastIssue)  // fallback note kept, only used when nothing downloads
     }
 
     func testProgressCountsSkipAndKeepLastTrack() {
@@ -67,28 +66,6 @@ final class StemLinkTests: XCTestCase {
         var p = SpotdlProgress()
         p.consume("ERROR: Could not complete the operation")
         XCTAssertEqual(p.lastIssue, "ERROR: Could not complete the operation")
-    }
-
-    // MARK: SpotdlOutput line splitting
-
-    func testOutputSplitsAcrossChunksAndFlushesTail() {
-        final class Snaps: @unchecked Sendable {
-            let lock = NSLock(); var value: [SpotdlProgress] = []
-            func add(_ p: SpotdlProgress) { lock.lock(); value.append(p); lock.unlock() }
-            var all: [SpotdlProgress] { lock.lock(); defer { lock.unlock() }; return value }
-        }
-        let snaps = Snaps()
-        let out = SpotdlOutput { snaps.add($0) }
-        out.append(Data("Downloaded \"A - B\":\nhttps://youtu.be/x".utf8))
-        XCTAssertEqual(snaps.all.count, 1)  // first line done, second has no newline yet
-        XCTAssertEqual(snaps.all[0].lastFinished, "A - B")
-        out.append(Data("\nSkipping \"C - D\" (file already exists)\n".utf8))
-        out.flush()
-        XCTAssertEqual(snaps.all.count, 3)
-        XCTAssertEqual(snaps.all.last?.skippedCount, 1)
-        let final = snaps.all.last!
-        XCTAssertEqual(final.finishedCount, 1)
-        XCTAssertEqual(final.lastFinished, "C - D")
     }
 
     // MARK: SpotdlRunner (Process, macOS only)
@@ -155,7 +132,7 @@ final class StemLinkTests: XCTestCase {
         } catch let error as SpotdlError {
             XCTAssertEqual(error, .cancelled)
         }
-        // The killed script must not leave a file behind (it never got that far anyway).
+        // the killed script must not leave files behind
         XCTAssertEqual((try? FileManager.default.contentsOfDirectory(atPath: dir.path))?.filter { $0.hasSuffix(".mp3") }, [])
     }
 

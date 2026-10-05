@@ -8,7 +8,6 @@ import Foundation
 ///   https://www.youtube.com/watch?v=…
 ///   Skipping "Artist - Title" (file already exists)
 public struct SpotdlProgress: Equatable, Sendable {
-    public private(set) var processing: String?
     public private(set) var lastFinished: String?
     public private(set) var finishedCount = 0
     public private(set) var skippedCount = 0
@@ -20,9 +19,7 @@ public struct SpotdlProgress: Equatable, Sendable {
     public mutating func consume(_ rawLine: String) {
         let line = rawLine.trimmingCharacters(in: .whitespaces)
         guard !line.isEmpty else { return }
-        if line.hasPrefix("Processing query:") {
-            processing = line.dropFirst("Processing query:".count).trimmingCharacters(in: .whitespaces)
-        } else if line.hasPrefix("Downloaded \"") || line.hasPrefix("Skipping \"") {
+        if line.hasPrefix("Downloaded \"") || line.hasPrefix("Skipping \"") {
             if let name = Self.quoted(line) {
                 lastFinished = name
                 if line.hasPrefix("Skipping") { skippedCount += 1 } else { finishedCount += 1 }
@@ -42,11 +39,10 @@ public struct SpotdlProgress: Equatable, Sendable {
     }
 }
 
-/// Splits spotDL's stdout+stderr stream into lines, keeping a running SpotdlProgress.
-/// Thread-safe: it is written from the Process readability handler thread and read from the task.
+/// Keeps a running SpotdlProgress from spotDL's output lines. Thread-safe: consume is
+/// called from the reader task, latest from anywhere.
 public final class SpotdlOutput: @unchecked Sendable {
     private let lock = NSLock()
-    private var bytes: [UInt8] = []
     private var progress = SpotdlProgress()
     private let onChange: @Sendable (SpotdlProgress) -> Void
 
@@ -54,32 +50,18 @@ public final class SpotdlOutput: @unchecked Sendable {
         self.onChange = onChange
     }
 
-    public func append(_ data: Data) {
-        lock.lock()
-        bytes.append(contentsOf: data)
-        var lines: [String] = []
-        while let i = bytes.firstIndex(of: UInt8(ascii: "\n")) {
-            lines.append(String(decoding: bytes[..<i], as: UTF8.self))
-            bytes.removeSubrange(...i)
-        }
-        lock.unlock()
-        for line in lines { consume(line) }
-    }
-
-    /// Emits anything left after the process exited (last line often has no newline).
-    public func flush() {
-        lock.lock()
-        let rest = String(decoding: bytes, as: UTF8.self)
-        bytes = []
-        lock.unlock()
-        if !rest.isEmpty { consume(rest) }
-    }
-
-    private func consume(_ line: String) {
+    public func consume(_ line: String) {
         lock.lock()
         progress.consume(line)
         let snapshot = progress
         lock.unlock()
         onChange(snapshot)
+    }
+
+    /// Latest snapshot (the same value the last onChange delivered).
+    public var latest: SpotdlProgress? {
+        lock.lock()
+        defer { lock.unlock() }
+        return progress
     }
 }

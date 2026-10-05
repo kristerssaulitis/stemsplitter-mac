@@ -138,7 +138,7 @@ def cac_spec(mix):
 torch.backends.mha.set_fastpath_enabled(False)  # else traces _native_multi_head_attention
 core = Core(net).eval()
 torch.manual_seed(0)
-# Reference input: a few sines + noise so all sources get some energy.
+# Sines + noise so all sources get some energy.
 t = torch.arange(L) / SR
 mono = 0.3 * torch.sin(2 * math.pi * 220 * t) + 0.2 * torch.sin(2 * math.pi * 55 * t) + 0.05 * torch.randn(L)
 mix = torch.stack([mono, 0.8 * mono + 0.02 * torch.randn(L)])[None].float()
@@ -157,7 +157,7 @@ mlmodel = ct.convert(
     compute_precision={
         "fp32": ct.precision.FLOAT32,
         "fp16": ct.precision.FLOAT16,
-        # ponytail: op-type granularity. Finer (per-layer) selection may close the last few dB.
+        # Op-type granularity; finer (per-layer) selection may close the last few dB.
         "mixed": ct.transform.FP16ComputePrecision(op_selector=lambda op: op.op_type in ("conv", "conv_transpose", "matmul", "linear")),
     }[args.precision],
 )

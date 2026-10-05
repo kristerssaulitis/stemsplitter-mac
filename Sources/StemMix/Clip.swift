@@ -1,7 +1,7 @@
 import Foundation
 
-/// A region of a stem's audio placed on the timeline, as in Ableton's arrangement / Logic's regions.
-/// Edits rewrite clip lists (instant, undoable); audio files are never touched. Times are seconds.
+/// A region of a stem's audio on the timeline, as in Ableton's arrangement / Logic's regions.
+/// Edits rewrite clip lists; audio files are never touched. Times are seconds.
 public struct Clip: Codable, Equatable, Sendable {
     public var start: Double     // timeline position
     public var offset: Double    // where the clip's audio begins in the source file

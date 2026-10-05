@@ -2,7 +2,6 @@ import AppKit
 import StemAnalysis
 import StemMix
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// Fixed label column + one horizontally scrolling, zoomable lane area sharing one time axis.
 /// Ruler: click = seek, drag = select across all stems (loop / export region).
@@ -332,7 +331,7 @@ struct StemLane: View {
                 if player.isPlaying || player.looping { player.play() }
             }
         case .move(let i) where click:
-            player.selection = base[i].start...base[i].end  // click the strip = select the clip
+            player.selection = base[i].start...base[i].end
         default:
             break
         }

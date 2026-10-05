@@ -10,8 +10,7 @@ import Foundation
 public final class CascadePipeline {
     private let vocals: MultiStemSeparator    // sources: [vocals, instrumental]
     private let residual: MultiStemSeparator  // sources: e.g. htdemucs's [drums, bass, other, vocals]
-    /// Stage-1 share of reported progress, measured on M3 Max GPU: 2-stem pass ≈ 47.6 s
-    /// vs 62.2 s for the full cascade on the same song.
+    /// Stage-1 share of progress (measured on M3 Max GPU: 2-stem pass ≈ 47.6 s of 62.2 s total).
     static let stageOneWeight = 0.77
 
     public init(vocals: MultiStemSeparator, residual: MultiStemSeparator) {

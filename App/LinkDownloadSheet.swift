@@ -1,8 +1,8 @@
 import StemLink
 import SwiftUI
 
-/// "Download from Link" (⌘L): paste a Spotify or YouTube link, the local spotDL install
-/// fetches tagged MP3s, and they split like dropped files.
+/// "Download from Link" (⌘L): paste a Spotify or YouTube link; the local spotDL install
+/// fetches tagged MP3s that split like dropped files.
 struct LinkDownloadSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var model = AppModel.shared

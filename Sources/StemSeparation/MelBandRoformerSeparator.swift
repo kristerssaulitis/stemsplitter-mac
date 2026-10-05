@@ -17,16 +17,16 @@ public final class MelBandRoformerSeparator: MultiStemSeparator {
     private let frames: Int
     private let entries: Int
     /// Entry indices bucketed by grid slot j = freq*2 + channel (CSR layout).
-    private let entryStart: [Int]  // 2*bins + 1 prefix sums
-    private let entryIdx: [Int]    // entries
+    private let entryStart: [Int]
+    private let entryIdx: [Int]
     private let bandsPerFreq: [Float]
 
     /// `url`: compiled `.mlmodelc`. GPU: the graph's attention runs there; like htdemucs,
     /// the ANE compiler rejects it.
-    public init(modelURL url: URL, computeUnits: MLComputeUnits = .cpuAndGPU) throws {
+    public init(modelURL url: URL) throws {
         guard FileManager.default.fileExists(atPath: url.path) else { throw SeparatorError.modelMissing(url.path) }
         let config = MLModelConfiguration()
-        config.computeUnits = computeUnits
+        config.computeUnits = .cpuAndGPU
         model = try MLModel(contentsOf: url, configuration: config)
         let meta = model.modelDescription.metadata[.creatorDefinedKey] as? [String: String] ?? [:]
         func intMeta(_ key: String) throws -> Int {
@@ -62,7 +62,6 @@ public final class MelBandRoformerSeparator: MultiStemSeparator {
         precondition(segment.count == 2 * L)
         let plane = B * T
 
-        let spec = try MLMultiArray(shape: [1, 4, NSNumber(value: B), NSNumber(value: T)], dataType: .float32)
         var cac = [Float](repeating: 0, count: 4 * plane)  // planes [L.re, L.im, R.re, R.im]
         segment.withUnsafeBufferPointer { seg in
             cac.withUnsafeMutableBufferPointer { c in
@@ -72,16 +71,18 @@ public final class MelBandRoformerSeparator: MultiStemSeparator {
                 }
             }
         }
-        try spec.writeDense(cac)
+        let spec = MLMultiArray(MLShapedArray(scalars: cac, shape: [1, 4, B, T]))
 
         let out = try model.prediction(from: MLDictionaryFeatureProvider(dictionary: ["spec": spec]))
         guard let mask = out.featureValue(for: "mask")?.multiArrayValue else {
             throw SeparatorError.badModel("missing mask output")
         }
-        let m = try mask.readDense(count: 2 * E * T)  // planes [re, im], each [entry][frame]
+        let maskArray = MLShapedArray<Float>(converting: mask)
+        guard maskArray.shape == [1, 2, E, T] else {
+            throw SeparatorError.badModel("unexpected mask output shape \(mask.shape)")
+        }
+        let m = Array(maskArray.scalars)  // planes [re, im], each [entry][frame]
 
-        // Per channel: scatter-average entry masks onto the grid, complex-multiply the mix
-        // spec, zero DC, synthesize. Layout mirrors the model: grid slot f*2 + ch.
         var result = [Float](repeating: 0, count: 2 * 2 * L)  // [vocals L/R, instrumental L/R]
         var accRe = [Float](repeating: 0, count: T)
         var accIm = [Float](repeating: 0, count: T)
@@ -125,7 +126,7 @@ public final class MelBandRoformerSeparator: MultiStemSeparator {
                     }
                 }
             }
-            // zero_dc: bin 0 of both channels is zeroed before the iSTFT.
+            // zero_dc.
             maskedIm.withUnsafeMutableBufferPointer { mi in maskedRe.withUnsafeMutableBufferPointer { mr in
                 mr.baseAddress![0] = 0
                 mi.baseAddress![0] = 0
@@ -139,7 +140,7 @@ public final class MelBandRoformerSeparator: MultiStemSeparator {
                 }
             }
         }
-        // instrumental = mix - vocals, per channel. vDSP_vsub's C = B - A (reversed!).
+        // vDSP_vsub's C = B - A (reversed!).
         result.withUnsafeMutableBufferPointer { r in
             segment.withUnsafeBufferPointer { s in
                 for ch in 0..<2 {

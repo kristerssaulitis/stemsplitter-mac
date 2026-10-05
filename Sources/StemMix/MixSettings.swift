@@ -66,9 +66,9 @@ public struct DelaySettings: Codable, Equatable, Sendable {
     public var mix: Double = 20       // % wet
     public init() {}
 
-    /// Seconds, following detected BPM and the tempo control.
-    public func seconds(bpm: Double?, tempo: Double) -> Double {
-        if let beats, let bpm, bpm > 0 { return min(2, 60 / (bpm * tempo) * beats) }
+    /// Seconds, following detected BPM (the delay sits pre-TimePitch: source time).
+    public func seconds(bpm: Double?) -> Double {
+        if let beats, let bpm, bpm > 0 { return min(2, 60 / bpm * beats) }
         return min(2, milliseconds / 1000)
     }
 }

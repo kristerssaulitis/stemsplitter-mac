@@ -235,8 +235,8 @@ final class PlayerModel {
         edit { _, c in cuts.reduce(c) { Clips.split($0, at: $1) } }
     }
 
-    /// ⌘D: copy the selection right after itself and move the selection onto the copy (press again to keep
-    /// repeating it). No selection: duplicate the track.
+    /// ⌘D: copy the selection after itself and move the selection onto the copy (press again to repeat).
+    /// No selection: duplicate the track.
     func duplicate() {
         guard let sel = selection else {
             if let stem = selectedStem { duplicateTrack(stem) }
@@ -351,8 +351,8 @@ final class PlayerModel {
     }
 
     /// File for dragging a stem out. Neutral settings → hard link to the stem (instant, named with
-    /// key/BPM). Otherwise the stem is rendered through its FX chain first.
-    /// ponytail: renders synchronously (well under a second for a song). Async file promise if it ever lags.
+    /// key/BPM); otherwise rendered through its FX chain first.
+    /// ponytail: renders synchronously (well under a second). Async file promise if it ever lags.
     func dragFile(stem: String) -> URL? {
         let url = cacheDir.appendingPathComponent(song.exportName(stem) + ".wav")
         try? FileManager.default.removeItem(at: url)

@@ -113,7 +113,7 @@ public enum Chroma {
     /// (noise, cymbals, silence) are zeroed: they have no pitch to contribute.
     public static func frames(_ x: [Float], sampleRate: Double = AudioLoader.sampleRate) -> [[Float]] {
         let stft = MagnitudeSTFT(size: fftSize, hop: hop)
-        // bin → pitch class, 50 Hz ... 4 kHz
+        // bin → pitch class
         var pc = [Int](repeating: -1, count: stft.bins)
         for k in 1..<stft.bins {
             let f = Double(k) * sampleRate / Double(fftSize)
@@ -143,7 +143,7 @@ public enum Chroma {
     }
 
     /// Frame energy, for silence gating.
-    public static func energy(_ x: [Float], sampleRate: Double = AudioLoader.sampleRate) -> [Float] {
+    public static func energy(_ x: [Float]) -> [Float] {
         let n = x.count / hop
         return (0..<n).map { i in
             var e: Float = 0

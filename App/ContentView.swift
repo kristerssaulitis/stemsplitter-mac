@@ -23,7 +23,6 @@ struct ContentView: View {
                         .id(player.song.id)
                         .inspector(isPresented: $showInspector) {
                             InspectorView(player: player)
-                                .inspectorColumnWidth(min: 240, ideal: 270, max: 340)
                         }
                 } else {
                     EmptyDropView(targeted: dropTargeted)

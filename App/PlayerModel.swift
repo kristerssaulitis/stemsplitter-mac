@@ -397,4 +397,29 @@ final class PlayerModel {
             return nil
         }
     }
+
+    /// MIDI chord track (triads, transposed with the pitch control). Region-limited when a selection exists.
+    func chordsFile() -> URL? {
+        var notes = (song.analysis?.chords ?? []).flatMap { $0.notes(semitones: song.semitones) }
+        guard !notes.isEmpty else { return nil }
+        var name = song.exportName(nil)
+        if let sel = selection {
+            notes = notes.filter { $0.end > sel.lowerBound && $0.start < sel.upperBound }.map {
+                var n = $0
+                n.start = max(0, n.start - sel.lowerBound)
+                n.end = min(sel.upperBound, n.end) - sel.lowerBound
+                return n
+            }
+            name += String(format: " - %.0fs", sel.lowerBound)
+        }
+        let tempo = song.mix.tempo
+        notes = notes.map { var n = $0; n.start /= tempo; n.end /= tempo; return n }
+        let url = cacheDir.appendingPathComponent(name + ".mid")
+        do {
+            try MIDIWriter.data(notes: notes, bpm: (song.analysis?.tempo?.bpm ?? 120) * tempo, name: "\(song.title) Chords").write(to: url)
+            return url
+        } catch {
+            return nil
+        }
+    }
 }

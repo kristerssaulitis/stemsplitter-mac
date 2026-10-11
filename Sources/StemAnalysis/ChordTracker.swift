@@ -28,6 +28,15 @@ public struct Chord: Codable, Equatable, Sendable {
 
     public var name: String { PitchClass.name(root) + quality.rawValue }
     public func transposed(_ semitones: Int) -> Chord { Chord(root: root + semitones, quality: quality) }
+
+    /// Triad reduction for MIDI export: 7ths collapse to major/minor, dim/sus have no substitute.
+    public var triad: Chord? {
+        switch quality {
+        case .major, .seventh, .major7: Chord(root: root, quality: .major)
+        case .minor, .minor7: Chord(root: root, quality: .minor)
+        case .dim, .sus2, .sus4: nil
+        }
+    }
 }
 
 public struct ChordSegment: Codable, Equatable, Sendable {
@@ -37,6 +46,18 @@ public struct ChordSegment: Codable, Equatable, Sendable {
     public var chord: Chord?
     /// Mean template similarity over the segment, 0...1. UI dims < 0.6.
     public var confidence: Double
+
+    /// Root-position triad at MIDI 48 (C3); nil chord or non-triad quality → [].
+    public func notes(semitones: Int = 0) -> [NoteEvent] {
+        guard let triad = chord?.triad else { return [] }
+        let root = 48 + (triad.root + semitones).positiveModulo(12)
+        return triad.quality.intervals.map { NoteEvent(start: start, end: end, pitch: root + $0, velocity: 0.8) }
+    }
+}
+
+extension Int {
+    /// ((n % m) + m) % m — Swift's % keeps the sign of the dividend.
+    public func positiveModulo(_ m: Int) -> Int { ((self % m) + m) % m }
 }
 
 /// Beat-synchronous chroma → cosine match against 96 chord templates + "no chord" → Viterbi smoothing.

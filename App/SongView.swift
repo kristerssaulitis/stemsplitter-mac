@@ -192,6 +192,7 @@ struct HeaderView: View {
                         Spacer(minLength: 12)
                         BPMBadge(player: player)
                         KeyBadge(song: song)
+                        ChordBadge(song: song)
                         PitchControl(player: player)
                     }
                 }
@@ -262,6 +263,27 @@ struct KeyBadge: View {
                 .help(String(format: "Confidence %.2f", result.confidence))
             } else {
                 Text("—").font(.title3).help("No clear key")
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+struct ChordBadge: View {
+    let song: Song
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("CHORDS").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            if song.analyzing {
+                Text("Detecting chords…").font(.title3).redacted(reason: .placeholder)
+            } else if song.chordNames.isEmpty {
+                Text("—").font(.title3).help("No chords: no clear tonal center")
+            } else {
+                Text(song.chordNames.prefix(4).joined(separator: " "))
+                    .font(.title3.weight(.semibold))
+                    .lineLimit(1)
+                    .help(song.chordNames.prefix(12).joined(separator: ", "))
             }
         }
         .accessibilityElement(children: .combine)

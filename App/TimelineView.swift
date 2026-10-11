@@ -386,14 +386,7 @@ struct ChordLane: View {
         }
         .accessibilityElement()
         .accessibilityLabel("Chords")
-        .accessibilityValue(chordSummary)
-    }
-
-    private var chordSummary: String {
-        let names = (song.analysis?.chords ?? []).compactMap { $0.chord?.transposed(song.semitones).name }
-        var unique: [String] = []
-        for n in names where unique.last != n { unique.append(n) }
-        return unique.prefix(12).joined(separator: ", ")
+        .accessibilityValue(song.chordNames.prefix(12).joined(separator: ", "))
     }
 }
 

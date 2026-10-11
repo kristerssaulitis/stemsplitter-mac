@@ -110,6 +110,14 @@ final class Song: Identifiable, Hashable {
     var key: MusicalKey? { analysis?.key?.key.transposed(semitones) }
     var bpm: Double? { analysis?.tempo.map { $0.bpm * mix.tempo } }
 
+    /// Transposed chord names, consecutive repeats collapsed.
+    var chordNames: [String] {
+        let names = (analysis?.chords ?? []).compactMap { $0.chord?.transposed(semitones).name }
+        var unique: [String] = []
+        for n in names where unique.last != n { unique.append(n) }
+        return unique
+    }
+
     /// "Title - Vocals - 124bpm Am"
     func exportName(_ stem: String?) -> String {
         var parts = [title]

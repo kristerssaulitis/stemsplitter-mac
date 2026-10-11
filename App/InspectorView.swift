@@ -177,6 +177,8 @@ struct ExportPanel: View {
                     }
                     Button { Exporter.midi(player) } label: { Label("Export MIDI…", systemImage: "music.note.list") }
                         .disabled(song.notes.isEmpty)
+                    Button { Exporter.chords(player) } label: { Label("Export Chords…", systemImage: "music.quarternote.3") }
+                        .disabled((song.analysis?.chords ?? []).isEmpty)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
@@ -303,5 +305,20 @@ enum Exporter {
             first = first ?? dest
         }
         if let first { NSWorkspace.shared.activateFileViewerSelecting([first]) }
+    }
+
+    static func chords(_ player: PlayerModel) {
+        guard let url = chooseFile(player.song.exportName(nil), ext: "mid") else { return }
+        guard let tmp = player.chordsFile() else {
+            AppModel.shared.errorMessage = "No chords to export."
+            return
+        }
+        try? FileManager.default.removeItem(at: url)
+        do {
+            try FileManager.default.copyItem(at: tmp, to: url)
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } catch {
+            AppModel.shared.errorMessage = error.localizedDescription
+        }
     }
 }

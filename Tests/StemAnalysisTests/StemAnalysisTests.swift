@@ -143,6 +143,26 @@ final class StemAnalysisTests: XCTestCase {
         XCTAssertEqual(segs.first?.chord?.name, "C")
     }
 
+    func testChordTriadReduction() {
+        XCTAssertEqual(Chord(root: 0, quality: .major).triad?.name, "C")
+        XCTAssertEqual(Chord(root: 9, quality: .minor7).triad?.name, "Am")
+        XCTAssertEqual(Chord(root: 0, quality: .seventh).triad?.name, "C")
+        XCTAssertEqual(Chord(root: 0, quality: .major7).triad?.name, "C")
+        XCTAssertNil(Chord(root: 0, quality: .dim).triad)
+        XCTAssertNil(Chord(root: 0, quality: .sus2).triad)
+        XCTAssertNil(Chord(root: 0, quality: .sus4).triad)
+    }
+
+    func testChordSegmentNotes() {
+        let seg = ChordSegment(start: 1.5, end: 3, chord: Chord(root: 9, quality: .minor7), confidence: 0.9)
+        let notes = seg.notes(semitones: 2)  // Am7 → Bm triad
+        XCTAssertEqual(notes.map(\.pitch), [59, 62, 66])
+        XCTAssertEqual(notes.map(\.velocity), [0.8, 0.8, 0.8])
+        for n in notes { XCTAssertEqual(n.start, 1.5); XCTAssertEqual(n.end, 3) }
+        XCTAssert(ChordSegment(start: 0, end: 1, chord: nil, confidence: 1).notes().isEmpty)
+        XCTAssert(ChordSegment(start: 0, end: 1, chord: Chord(root: 0, quality: .sus4), confidence: 1).notes().isEmpty)
+    }
+
     func testTranscribeCMajorScale() throws {
         let url = modelsDir.appendingPathComponent("basic-pitch.mlmodelc")
         guard FileManager.default.fileExists(atPath: url.path) else { throw XCTSkip("no basic-pitch model") }

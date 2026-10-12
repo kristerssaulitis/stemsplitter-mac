@@ -153,6 +153,13 @@ struct EmptyDropView: View {
 
 struct SidebarView: View {
     @Bindable var model = AppModel.shared
+    @State private var searchText = ""
+
+    private var filteredSongs: [Song] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return model.songs }
+        return model.songs.filter { $0.title.localizedCaseInsensitiveContains(query) }
+    }
 
     var body: some View {
         List(selection: Binding(get: { model.selection }, set: { model.select($0) })) {
@@ -162,7 +169,7 @@ struct SidebarView: View {
                 }
             }
             Section("Library") {
-                ForEach(model.songs) { song in
+                ForEach(filteredSongs) { song in
                     SongRow(song: song)
                         .tag(song)
                         .contextMenu {
@@ -174,10 +181,16 @@ struct SidebarView: View {
                 }
             }
         }
+        .searchable(text: $searchText, placement: .sidebar)
         .listStyle(.sidebar)
         .overlay {
             if model.songs.isEmpty && model.queue.isEmpty {
                 Text("Splits you make show up here.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding()
+            } else if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && filteredSongs.isEmpty {
+                Text("No tracks found")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .padding()

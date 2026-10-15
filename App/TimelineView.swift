@@ -93,8 +93,26 @@ struct TimelineView: View {
     private var labels: some View {
         VStack(alignment: .leading, spacing: Self.rowSpacing) {
             Color.clear.frame(height: Self.rulerHeight)
-            Text("CHORDS").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                .frame(height: Self.chordHeight)
+            HStack(spacing: 6) {
+                Text("CHORDS").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                if player.hasChordNotes {
+                    Image(systemName: "pianokeys")
+                        .foregroundStyle(.secondary)
+                        .contentShape(Rectangle())
+                        .onDrag {
+                            guard let url = player.chordsFile() else { return NSItemProvider() }
+                            let provider = NSItemProvider(object: url as NSURL)
+                            provider.suggestedName = url.lastPathComponent
+                            return provider
+                        } preview: {
+                            Label("\(song.exportName(nil)).mid", systemImage: "music.note.list")
+                                .padding(6).background(Color.accentColor.opacity(0.85), in: Capsule())
+                        }
+                        .help("Drag chord MIDI into Finder or your DAW")
+                        .accessibilityLabel("Drag chord MIDI")
+                }
+            }
+            .frame(height: Self.chordHeight)
             ForEach(Array(song.stemNames.enumerated()), id: \.element) { index, stem in
                 StemHeader(player: player, stem: stem, index: index)
             }

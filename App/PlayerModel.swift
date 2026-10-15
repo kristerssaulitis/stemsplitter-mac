@@ -398,10 +398,15 @@ final class PlayerModel {
         }
     }
 
+    var hasChordNotes: Bool {
+        var notes = (song.analysis?.chords ?? []).flatMap { $0.notes() }
+        if let selection { notes = notes.filter { $0.end > selection.lowerBound && $0.start < selection.upperBound } }
+        return !notes.isEmpty
+    }
+
     /// MIDI chord track (triads, transposed with the pitch control). Region-limited when a selection exists.
     func chordsFile() -> URL? {
         var notes = (song.analysis?.chords ?? []).flatMap { $0.notes(semitones: song.semitones) }
-        guard !notes.isEmpty else { return nil }
         var name = song.exportName(nil)
         if let sel = selection {
             notes = notes.filter { $0.end > sel.lowerBound && $0.start < sel.upperBound }.map {
@@ -412,6 +417,7 @@ final class PlayerModel {
             }
             name += String(format: " - %.0fs", sel.lowerBound)
         }
+        guard !notes.isEmpty else { return nil }
         let tempo = song.mix.tempo
         notes = notes.map { var n = $0; n.start /= tempo; n.end /= tempo; return n }
         let url = cacheDir.appendingPathComponent(name + ".mid")
